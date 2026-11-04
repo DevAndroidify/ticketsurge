@@ -10,6 +10,7 @@ import {
   postgresUrlSchema,
 } from '@ticketsurge/config';
 import { createKafka, createProducer } from '@ticketsurge/kafka';
+import { ServiceMetrics, startMetricsServer } from '@ticketsurge/metrics';
 import pg from 'pg';
 import { z } from 'zod';
 import { startNotificationService } from './service.js';
@@ -17,6 +18,8 @@ import { startNotificationService } from './service.js';
 const configSchema = z.object({
   NODE_ENV: nodeEnvSchema,
   LOG_LEVEL: logLevelSchema,
+  // Prometheus scrapes GET /metrics here; 0 disables it (e.g. a second instance on one host).
+  METRICS_PORT: z.coerce.number().int().min(0).max(65535).default(9105),
   DATABASE_URL: postgresUrlSchema,
   KAFKA_BROKERS: brokerListSchema,
   KAFKA_CLIENT_ID: z.string().min(1).default('notification-service'),
@@ -39,6 +42,8 @@ function readConfig() {
 
 const config = readConfig();
 const logger = createLogger({ service: 'notification-service', level: config.LOG_LEVEL });
+const metrics = new ServiceMetrics('notification-service');
+await startMetricsServer(metrics.registry, config.METRICS_PORT);
 const db = new pg.Pool({
   connectionString: config.DATABASE_URL,
   max: config.CONSUMER_CONCURRENCY + 2,
@@ -54,7 +59,7 @@ const kafka = createKafka({
 
 const producer = await createProducer(kafka);
 const consumer = await startNotificationService(
-  { db, kafka, producer, logger },
+  { db, kafka, producer, logger, metrics },
   { topicPrefix: config.KAFKA_TOPIC_PREFIX, concurrency: config.CONSUMER_CONCURRENCY },
 );
 logger.info('notification service started');

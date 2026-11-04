@@ -6,11 +6,14 @@ import {
   type Producer,
   type RunningConsumer,
 } from '@ticketsurge/kafka';
-import { OutboxRelay } from '@ticketsurge/outbox';
+import { OutboxRelay, outboxBacklog } from '@ticketsurge/outbox';
+import type { ServiceMetrics } from '@ticketsurge/metrics';
 import type pg from 'pg';
 import { createPaymentHandler, type PaymentSettings } from './payments.js';
 
 export interface PaymentServiceDeps {
+  /** Prometheus metrics; omitted in tests that do not need them. */
+  metrics?: ServiceMetrics;
   db: pg.Pool;
   kafka: KafkaClient;
   producer: Producer;
@@ -40,6 +43,7 @@ export async function startPaymentService(
   const relay = new OutboxRelay({
     db,
     table: 'payment.outbox',
+    onPublished: deps.metrics?.outbox('payment.outbox', () => outboxBacklog(db, 'payment.outbox')),
     producer,
     logger,
     batchSize: settings.outboxBatchSize,
@@ -50,6 +54,7 @@ export async function startPaymentService(
   const consumer = await startConsumer({
     kafka,
     groupId: `${prefix}${CONSUMER_GROUPS.paymentService}`,
+    onOutcome: deps.metrics?.consumer(`${prefix}${CONSUMER_GROUPS.paymentService}`),
     deadLetter: {
       topic: dlqTopicName(prefix, CONSUMER_GROUPS.paymentService),
       producer,

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { ConfigError, createLogger, loadConfig, loadEnvFile } from '@ticketsurge/config';
+import { Counter, Gauge, createRegistry, startMetricsServer } from '@ticketsurge/metrics';
+import { keys } from '@ticketsurge/redis-scripts';
 import { Redis } from 'ioredis';
 import { runAdmissionLoop } from './admission.js';
 import { admissionConfigSchema } from './config.js';
@@ -30,6 +32,28 @@ redis.on('error', (error) => {
   logger.warn({ err: error }, 'redis connection error');
 });
 
+const registry = createRegistry('admission-worker');
+const admitted = new Counter({
+  name: 'ticketsurge_admitted_users_total',
+  help: 'Users moved from the virtual queue to admitted',
+  labelNames: ['event_id'] as const,
+  registers: [registry],
+});
+new Gauge({
+  name: 'ticketsurge_queue_waiting_users',
+  help: 'Users waiting in the virtual queue, per event',
+  labelNames: ['event_id'] as const,
+  registers: [registry],
+  async collect() {
+    if (redis.status !== 'ready') return;
+    this.reset();
+    for (const eventId of await redis.smembers(keys.activeQueues)) {
+      this.set({ event_id: eventId }, await redis.zcard(keys.queue(eventId)));
+    }
+  },
+});
+const metricsServer = await startMetricsServer(registry, config.METRICS_PORT);
+
 const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
@@ -56,5 +80,9 @@ await runAdmissionLoop(
   },
   logger,
   controller.signal,
+  (eventId, count) => {
+    admitted.inc({ event_id: eventId }, count);
+  },
 );
+metricsServer?.close();
 await redis.quit().catch(() => undefined);

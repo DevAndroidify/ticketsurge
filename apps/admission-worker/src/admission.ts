@@ -62,6 +62,7 @@ export async function runAdmissionLoop(
   settings: AdmissionSettings,
   logger: Logger,
   signal: AbortSignal,
+  onAdmitted: (eventId: string, count: number) => void = () => undefined,
 ): Promise<void> {
   while (!signal.aborted) {
     const started = Date.now();
@@ -75,6 +76,7 @@ export async function runAdmissionLoop(
       const admitted = await runAdmissionTick(redis, settings);
       for (const [eventId, users] of admitted) {
         logger.info({ eventId, admitted: users.length }, 'admitted users');
+        onAdmitted(eventId, users.length);
       }
     } catch (error) {
       // Redis outages are expected during failure tests; keep trying on the next round.

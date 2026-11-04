@@ -9,6 +9,8 @@ import { z } from 'zod';
 export const admissionConfigSchema = z.object({
   NODE_ENV: nodeEnvSchema,
   LOG_LEVEL: logLevelSchema,
+  // Prometheus scrapes GET /metrics here; 0 disables it.
+  METRICS_PORT: z.coerce.number().int().min(0).max(65535).default(9101),
   REDIS_URL: redisUrlSchema,
   // Every interval, up to ADMISSION_BATCH_SIZE users per event are admitted.
   // Throughput per event = batch size / interval (default 50 users per second).

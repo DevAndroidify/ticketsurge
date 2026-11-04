@@ -15,7 +15,7 @@
 | 11    | Tickets and notifications     | Done        |
 | 12    | Retries and dead letters      | Done        |
 | 13    | Analytics and replay          | Done        |
-| 14    | Monitoring                    | Not started |
+| 14    | Monitoring                    | Done        |
 | 15    | Load and failure tests        | Not started |
 
 ## Phase 1: Project setup (done 2026-11-04)
@@ -305,3 +305,38 @@ Notes:
 
 - A rebuild only sees messages Kafka still retains (7 days by default). For longer history, raise
   `KAFKA_RETENTION_MS` or snapshot the totals.
+
+## Phase 14: Monitoring (done 2026-11-04)
+
+- `packages/metrics` (new shared package, prom-client): per-service registries with Node process
+  metrics; HTTP request count and latency per route template; Kafka message count by result and
+  processing time per consumer group; outbox backlog (read at scrape time) and rows published.
+- Every process serves `GET /metrics`: the API on 3000, realtime-gateway on 3001 (connections, messages
+  forwarded), and the workers on `METRICS_PORT` (admission 9101 with queue length and admissions,
+  booking-worker 9102, payment 9103, ticket 9104, notification 9105, analytics 9106).
+- Trace IDs: the API's request ID is the trace ID (taken from a valid `X-Request-Id` or generated),
+  logged as `traceId`, returned in `X-Request-Id`, and stored in every event envelope. Consumers run each
+  handler inside an AsyncLocalStorage trace context, so every log line includes `traceId` and
+  `messageId`.
+- Compose: kafka-exporter v1.11.0 (consumer lag), Prometheus v3.15.1 (5 s scrapes of the exporter and
+  all host services), Grafana 13.2.5 on port 3002 with a provisioned datasource and the "TicketSurge
+  overview" dashboard (`infra/grafana/build-dashboard.mjs`): throughput, p95 latency, and errors by
+  route; queue; consumer lag, throughput, p95 processing time, and dead letters by group; outbox
+  backlog; services up.
+- `scripts/grafana-lag.sh <group>` prints a group's lag as Grafana's Prometheus datasource reports it.
+- Test (live, all eight services): with ticket-service stopped and bookings continuing, its lag in Grafana
+  went 2, 3, 5, 6; after restarting it, lag returned to 0 within 25 s. One booking's traceId appeared in
+  the logs of api, booking-worker, payment, ticket, and notification services. Automated tests cover
+  route-template metrics, X-Request-Id handling, trace propagation into events, and trace context in
+  consumer handlers.
+
+Fixed during this phase:
+
+- Kafka data was not persisted (found while testing): the apache/kafka image writes to
+  `/tmp/kraft-combined-logs` unless `KAFKA_LOG_DIRS` is set, so recreating the container lost all topics
+  and consumer offsets. `KAFKA_LOG_DIRS=/var/lib/kafka/data` now puts the log on the named volume
+  (verified across a forced recreate).
+
+Notes:
+
+- kafka-exporter reports -1 lag for partitions without a committed offset; dashboards clamp it to 0.

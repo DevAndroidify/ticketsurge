@@ -1,5 +1,6 @@
 import { ConfigError, createLogger, loadConfig, loadEnvFile } from '@ticketsurge/config';
 import { createKafka, createProducer } from '@ticketsurge/kafka';
+import { ServiceMetrics, startMetricsServer } from '@ticketsurge/metrics';
 import pg from 'pg';
 import { analyticsConfigSchema } from './config.js';
 import { startAnalyticsService } from './service.js';
@@ -19,6 +20,8 @@ function readConfig() {
 
 const config = readConfig();
 const logger = createLogger({ service: 'analytics-service', level: config.LOG_LEVEL });
+const metrics = new ServiceMetrics('analytics-service');
+await startMetricsServer(metrics.registry, config.METRICS_PORT);
 const db = new pg.Pool({
   connectionString: config.DATABASE_URL,
   max: config.CONSUMER_CONCURRENCY + 2,
@@ -34,7 +37,7 @@ const kafka = createKafka({
 const producer = await createProducer(kafka);
 
 const consumer = await startAnalyticsService(
-  { db, kafka, producer, logger },
+  { db, kafka, producer, logger, metrics },
   { topicPrefix: config.KAFKA_TOPIC_PREFIX, concurrency: config.CONSUMER_CONCURRENCY },
 );
 logger.info('analytics service started');

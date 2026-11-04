@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { currentTrace } from '@ticketsurge/config';
 import {
   TOPICS,
   createEnvelope,
@@ -32,6 +33,7 @@ let dlq: string;
 const behaviour = new Map<string, 'ok' | 'flaky' | 'always-fail' | 'permanent'>();
 const attempts = new Map<string, number>();
 const handled: string[] = [];
+const traces = new Map<string, ReturnType<typeof currentTrace>>();
 
 beforeAll(async () => {
   topics = await createTestTopics();
@@ -63,6 +65,7 @@ beforeAll(async () => {
       if (mode === 'always-fail') throw new Error('database unreachable');
       if (mode === 'permanent') throw new PermanentError('seat belongs to another event');
       handled.push(id);
+      traces.set(id, currentTrace());
       await Promise.resolve();
     },
   });
@@ -139,6 +142,14 @@ describe('retries and dead letters', () => {
     await send(JSON.stringify(confirmed(id)));
     await waitHandled(id);
     expect(attempts.get(id)).toBe(3);
+  });
+
+  it('runs handlers inside the message trace context, so their logs carry the traceId', async () => {
+    const id = randomUUID();
+    const envelope = confirmed(id);
+    await send(JSON.stringify(envelope));
+    await waitHandled(id);
+    expect(traces.get(id)).toEqual({ traceId: 'dlq-test', messageId: envelope.messageId });
   });
 
   it('dead-letters after the retry budget is spent, and moves on', async () => {

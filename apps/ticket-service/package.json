@@ -13,6 +13,7 @@
     "@ticketsurge/config": "^0.1.0",
     "@ticketsurge/events": "^0.1.0",
     "@ticketsurge/kafka": "^0.1.0",
+    "@ticketsurge/metrics": "^0.1.0",
     "@ticketsurge/outbox": "^0.1.0",
     "pg": "^8.23.1",
     "zod": "^4.6.7"

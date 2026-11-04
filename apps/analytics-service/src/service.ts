@@ -6,10 +6,13 @@ import {
   type Producer,
   type RunningConsumer,
 } from '@ticketsurge/kafka';
+import type { ServiceMetrics } from '@ticketsurge/metrics';
 import type pg from 'pg';
 import { createAnalyticsHandler } from './analytics.js';
 
 export interface AnalyticsServiceDeps {
+  /** Prometheus metrics; omitted in tests that do not need them. */
+  metrics?: ServiceMetrics;
   db: pg.Pool;
   kafka: KafkaClient;
   /** Only used to write failed messages to the dead-letter topic. */
@@ -29,6 +32,7 @@ export async function startAnalyticsService(
   return startConsumer({
     kafka: deps.kafka,
     groupId: analyticsGroupId(prefix),
+    onOutcome: deps.metrics?.consumer(analyticsGroupId(prefix)),
     deadLetter: { topic: dlqTopicName(prefix, CONSUMER_GROUPS.analytics), producer: deps.producer },
     topics: [
       topicName(prefix, TOPICS.bookingConfirmed),

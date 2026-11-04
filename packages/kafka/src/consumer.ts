@@ -1,5 +1,5 @@
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
-import type { Logger } from '@ticketsurge/config';
+import { runWithTrace, type Logger } from '@ticketsurge/config';
 import { parseEnvelope, type AnyEnvelope } from '@ticketsurge/events';
 import { ZodError } from 'zod';
 import type { KafkaClient, Producer } from './client.js';
@@ -154,7 +154,10 @@ export async function startConsumer(options: ConsumerOptions): Promise<RunningCo
         for (;;) {
           attempts++;
           try {
-            await handle(envelope, meta);
+            // Every log line the handler writes carries the booking's traceId and this messageId.
+            await runWithTrace({ traceId: envelope.traceId, messageId: envelope.messageId }, () =>
+              handle(envelope, meta),
+            );
             failure = undefined;
             break;
           } catch (error) {
@@ -166,6 +169,7 @@ export async function startConsumer(options: ConsumerOptions): Promise<RunningCo
               {
                 err: error,
                 ...meta,
+                traceId: envelope.traceId,
                 messageId: envelope.messageId,
                 attempt: attempts,
                 retryInMs: delay,

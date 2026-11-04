@@ -1,5 +1,6 @@
 import websocket from '@fastify/websocket';
 import type { Logger } from '@ticketsurge/config';
+import { Counter, Gauge, createRegistry } from '@ticketsurge/metrics';
 import { channelId } from '@ticketsurge/redis-scripts';
 import Fastify, { type FastifyBaseLogger } from 'fastify';
 import type { Redis } from 'ioredis';
@@ -102,6 +103,25 @@ export async function buildGateway({ logger, subscriber, config }: GatewayDeps) 
   await app.register(websocket, { options: { maxPayload: 4096 } });
   app.decorateRequest('wsUserId', null);
 
+  const metrics = createRegistry('realtime-gateway');
+  new Gauge({
+    name: 'ticketsurge_ws_connections',
+    help: 'Open WebSocket connections',
+    registers: [metrics],
+    collect() {
+      this.set(registry.size);
+    },
+  });
+  const forwarded = new Counter({
+    name: 'ticketsurge_ws_messages_forwarded_total',
+    help: 'Pub/Sub messages delivered to WebSocket clients, by channel kind',
+    labelNames: ['kind'] as const,
+    registers: [metrics],
+  });
+  app.get('/metrics', { logLevel: 'warn' }, async (_request, reply) => {
+    return reply.type(metrics.contentType).send(await metrics.metrics());
+  });
+
   // Route every Pub/Sub message to the sockets that want it. The payload is already JSON.
   await subscriber.psubscribe('seats:*', 'user:*');
   subscriber.on('pmessage', (_pattern: string, channel: string, message: string) => {
@@ -110,7 +130,10 @@ export async function buildGateway({ logger, subscriber, config }: GatewayDeps) 
     const clients =
       target.kind === 'seats' ? registry.forEvent(target.id) : registry.forUser(target.id);
     for (const client of clients) {
-      if (client.socket.readyState === client.socket.OPEN) client.socket.send(message);
+      if (client.socket.readyState === client.socket.OPEN) {
+        client.socket.send(message);
+        forwarded.inc({ kind: target.kind });
+      }
     }
   });
 

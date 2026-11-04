@@ -1,0 +1,35 @@
+# Short intervals so dashboards react quickly during demos and load tests.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Kafka consumer lag and topic offsets.
+  - job_name: kafka-exporter
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+
+  # The Node services run on the host (WSL) and expose GET /metrics.
+  # A stopped service shows as down (`up == 0`) instead of failing the whole job.
+  - job_name: ticketsurge
+    static_configs:
+      - targets: ['host.docker.internal:3000']
+        labels: { app: api }
+      - targets: ['host.docker.internal:3001']
+        labels: { app: realtime-gateway }
+      - targets: ['host.docker.internal:9101']
+        labels: { app: admission-worker }
+      - targets: ['host.docker.internal:9102']
+        labels: { app: booking-worker }
+      - targets: ['host.docker.internal:9103']
+        labels: { app: payment-service }
+      - targets: ['host.docker.internal:9104']
+        labels: { app: ticket-service }
+      - targets: ['host.docker.internal:9105']
+        labels: { app: notification-service }
+      - targets: ['host.docker.internal:9106']
+        labels: { app: analytics-service }
+      # Extra booking-worker instances used in the failure tests (BOOKING_WORKER_ROLES split).
+      - targets:
+          ['host.docker.internal:9112', 'host.docker.internal:9122', 'host.docker.internal:9132']
+        labels: { app: booking-worker }

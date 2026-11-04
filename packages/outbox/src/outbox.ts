@@ -43,6 +43,8 @@ export interface OutboxRelayOptions {
   logger: Logger;
   batchSize?: number;
   pollIntervalMs?: number;
+  /** Called with the number of rows each successful batch published (used for metrics). */
+  onPublished?: (count: number) => void;
 }
 
 interface OutboxRow {
@@ -116,6 +118,7 @@ export class OutboxRelay {
         rows.map((row) => row.id),
       ]);
       await client.query('COMMIT');
+      this.options.onPublished?.(rows.length);
       return rows.length;
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);

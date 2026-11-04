@@ -6,8 +6,9 @@ import {
   type Producer,
   type RunningConsumer,
 } from '@ticketsurge/kafka';
-import { OutboxRelay } from '@ticketsurge/outbox';
+import { OutboxRelay, outboxBacklog } from '@ticketsurge/outbox';
 import type { Redis } from 'ioredis';
+import type { ServiceMetrics } from '@ticketsurge/metrics';
 import type pg from 'pg';
 import { createSagaHandler } from './saga.js';
 import { createSeatSyncHandler } from './seat-sync.js';
@@ -17,6 +18,8 @@ export const ROLES = ['relay', 'saga', 'sweeper', 'seat-sync'] as const;
 export type Role = (typeof ROLES)[number];
 
 export interface BookingWorkerDeps {
+  /** Prometheus metrics; omitted in tests that do not need them. */
+  metrics?: ServiceMetrics;
   db: pg.Pool;
   kafka: KafkaClient;
   producer: Producer;
@@ -54,6 +57,9 @@ export async function startBookingWorker(
     const relay = new OutboxRelay({
       db,
       table: 'booking.outbox',
+      onPublished: deps.metrics?.outbox('booking.outbox', () =>
+        outboxBacklog(db, 'booking.outbox'),
+      ),
       producer,
       logger,
       batchSize: settings.outboxBatchSize,
@@ -66,6 +72,7 @@ export async function startBookingWorker(
     consumers.saga = await startConsumer({
       kafka,
       groupId: `${prefix}${CONSUMER_GROUPS.bookingSaga}`,
+      onOutcome: deps.metrics?.consumer(`${prefix}${CONSUMER_GROUPS.bookingSaga}`),
       deadLetter: {
         topic: dlqTopicName(prefix, CONSUMER_GROUPS.bookingSaga),
         producer,
@@ -81,6 +88,7 @@ export async function startBookingWorker(
     consumers['seat-sync'] = await startConsumer({
       kafka,
       groupId: `${prefix}${CONSUMER_GROUPS.seatSync}`,
+      onOutcome: deps.metrics?.consumer(`${prefix}${CONSUMER_GROUPS.seatSync}`),
       deadLetter: {
         topic: dlqTopicName(prefix, CONSUMER_GROUPS.seatSync),
         producer,

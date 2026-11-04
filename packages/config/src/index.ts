@@ -12,3 +12,4 @@ export {
   redisUrlSchema,
 } from './env.js';
 export { createLogger, type Logger, type LoggerOptions } from './logger.js';
+export { currentTrace, runWithTrace, type TraceContext } from './trace.js';

@@ -71,6 +71,9 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       # Keep the JVM small; the WSL VM has limited memory.
       KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+      # The image defaults to /tmp/kraft-combined-logs, which is lost whenever the container is
+      # recreated. Store the log on the named volume instead.
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -106,6 +109,65 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # ---------- Monitoring ----------
+
+  # Consumer lag comes from Kafka itself: committed offset vs log end offset per group and partition.
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.11.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: ['--kafka.server=kafka:19092']
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    depends_on:
+      - kafka-exporter
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=3d
+      - --web.enable-lifecycle
+    ports:
+      - '${PROMETHEUS_HOST_PORT:-9090}:9090'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    # The Node services run on the host (WSL); this name lets Prometheus reach them.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:9090/-/ready']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.5
+    depends_on:
+      - prometheus
+    ports:
+      - '${GRAFANA_HOST_PORT:-3002}:3000'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/api/health | grep -q ok']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   kafka-data:
+  prometheus-data:
+  grafana-data:

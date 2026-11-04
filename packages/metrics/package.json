@@ -1,0 +1,23 @@
+{
+  "name": "@ticketsurge/metrics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prometheus metrics shared by all services",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "prom-client": "^15.1.3"
+  }
+}

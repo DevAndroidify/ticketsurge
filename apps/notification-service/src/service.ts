@@ -6,10 +6,13 @@ import {
   type Producer,
   type RunningConsumer,
 } from '@ticketsurge/kafka';
+import type { ServiceMetrics } from '@ticketsurge/metrics';
 import type pg from 'pg';
 import { createNotificationHandler, type Sender } from './notifications.js';
 
 export interface NotificationServiceDeps {
+  /** Prometheus metrics; omitted in tests that do not need them. */
+  metrics?: ServiceMetrics;
   db: pg.Pool;
   kafka: KafkaClient;
   /** Only used to write failed messages to the dead-letter topic. */
@@ -42,6 +45,7 @@ export async function startNotificationService(
   return startConsumer({
     kafka,
     groupId: `${prefix}${CONSUMER_GROUPS.notificationService}`,
+    onOutcome: deps.metrics?.consumer(`${prefix}${CONSUMER_GROUPS.notificationService}`),
     deadLetter: {
       topic: dlqTopicName(prefix, CONSUMER_GROUPS.notificationService),
       producer,

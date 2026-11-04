@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from '@ticketsurge/config';
+import { createRegistry, httpMetrics } from '@ticketsurge/metrics';
 import Fastify, { type FastifyBaseLogger } from 'fastify';
 import type { Redis } from 'ioredis';
 import type pg from 'pg';
@@ -25,6 +26,9 @@ export interface AppDeps {
   healthChecks: Record<string, HealthCheck>;
 }
 
+/** Accepted incoming trace IDs: safe to log and to carry in event envelopes. */
+const TRACE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
+
 export function tokenServiceFrom(config: ApiConfig): TokenService {
   return new TokenService({
     secret: config.JWT_SECRET,
@@ -41,10 +45,32 @@ export async function buildApp({ logger, config, db, redis, healthChecks }: AppD
   const app = Fastify({
     loggerInstance,
     bodyLimit: 1024 * 1024,
-    // Unique across processes; becomes the traceId of events this request produces.
-    genReqId: () => randomUUID(),
+    // The request ID is the trace ID: logged as `traceId` on every request log line, returned in
+    // X-Request-Id, and copied into every event this request produces, so one booking can be
+    // followed from the HTTP call through every service's logs.
+    requestIdHeader: false,
+    requestIdLogLabel: 'traceId',
+    genReqId: (request) => {
+      const incoming = request.headers['x-request-id'];
+      return typeof incoming === 'string' && TRACE_ID.test(incoming) ? incoming : randomUUID();
+    },
   });
   registerErrorHandler(app);
+
+  const registry = createRegistry('api');
+  const recordHttp = httpMetrics(registry);
+  app.addHook('onSend', async (request, reply, payload) => {
+    void reply.header('x-request-id', request.id);
+    return payload;
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    // Route template ("/events/:id/holds"), never the raw URL, so label cardinality stays bounded.
+    const route = request.routeOptions.url ?? 'unmatched';
+    recordHttp(request.method, route, reply.statusCode, reply.elapsedTime / 1000);
+  });
+  app.get('/metrics', { logLevel: 'warn' }, async (_request, reply) => {
+    return reply.type(registry.contentType).send(await registry.metrics());
+  });
 
   const tokens = tokenServiceFrom(config);
   const { authenticate, requireAdmin } = registerAuth(app, tokens, config.ADMIN_EMAILS);

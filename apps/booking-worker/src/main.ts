@@ -1,6 +1,7 @@
 import { ConfigError, createLogger, loadConfig, loadEnvFile } from '@ticketsurge/config';
 import { createKafka, createProducer } from '@ticketsurge/kafka';
 import { Redis } from 'ioredis';
+import { ServiceMetrics, startMetricsServer } from '@ticketsurge/metrics';
 import pg from 'pg';
 import { bookingWorkerConfigSchema } from './config.js';
 import { startBookingWorker } from './worker.js';
@@ -20,6 +21,8 @@ function readConfig() {
 
 const config = readConfig();
 const logger = createLogger({ service: 'booking-worker', level: config.LOG_LEVEL });
+const metrics = new ServiceMetrics('booking-worker');
+await startMetricsServer(metrics.registry, config.METRICS_PORT);
 
 const db = new pg.Pool({
   connectionString: config.DATABASE_URL,
@@ -45,7 +48,7 @@ redis.on('error', (error) => {
 });
 
 const worker = await startBookingWorker(
-  { db, kafka, producer, logger, redis },
+  { db, kafka, producer, logger, metrics, redis },
   {
     roles: config.BOOKING_WORKER_ROLES,
     topicPrefix: config.KAFKA_TOPIC_PREFIX,
