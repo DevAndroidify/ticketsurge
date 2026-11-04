@@ -350,7 +350,21 @@ Notes:
 - `load-tests/flash-sale.js` (k6 2.3.0) and `load-tests/run.sh baseline|failures`: prepares 10,000 users
   and a 500-seat event, runs every service (booking-worker split by role), injects the drills, waits for
   drain, runs the consistency check, and collects measurements from k6 and Prometheus.
-- Results are in the README. Both runs passed the consistency check.
+- Both runs passed the consistency check. Measured 2026-11-04 on an Intel Core i5-1235U (12 threads),
+  WSL2 with 3.7 GB RAM; 10,000 users (200 at a time), 500 seats, 10% abandoned holds, 10% failed payments:
+
+  | Measurement              | Baseline | With failure drills |
+  | ------------------------ | -------- | ------------------- |
+  | Peak requests per second | 593      | 329                 |
+  | p95 hold latency         | 1.8 s    | 4.9 s               |
+  | p95 booking latency      | 2.8 s    | 5.0 s               |
+  | Max consumer lag         | 52       | 563                 |
+  | Recovery time            | 0 s      | 170 s               |
+  | Seats sold               | 497      | 493                 |
+
+  Drills: kill -9 one of two saga instances, stop the relay (78 s), restart Redis + `redis:rebuild`,
+  stop ticket-service for 30 s. Recovery time runs from the last fault ending until lag and outbox
+  backlog stayed at 0, while the load was still running.
 
 Findings:
 
