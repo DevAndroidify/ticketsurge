@@ -1,5 +1,6 @@
 import { ConfigError, createLogger, loadConfig, loadEnvFile } from '@ticketsurge/config';
 import { createKafka, createProducer } from '@ticketsurge/kafka';
+import { Redis } from 'ioredis';
 import pg from 'pg';
 import { bookingWorkerConfigSchema } from './config.js';
 import { startBookingWorker } from './worker.js';
@@ -33,9 +34,18 @@ const kafka = createKafka({
   logger,
 });
 const producer = await createProducer(kafka);
+const redis = new Redis(config.REDIS_URL, {
+  // Fail fast while Redis is down; seat-sync's consumer retries the message with backoff.
+  enableOfflineQueue: false,
+  maxRetriesPerRequest: 1,
+  retryStrategy: (attempt) => Math.min(attempt * 200, 2000),
+});
+redis.on('error', (error) => {
+  logger.warn({ err: error }, 'redis connection error');
+});
 
 const worker = await startBookingWorker(
-  { db, kafka, producer, logger },
+  { db, kafka, producer, logger, redis },
   {
     roles: config.BOOKING_WORKER_ROLES,
     topicPrefix: config.KAFKA_TOPIC_PREFIX,
@@ -61,6 +71,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
         logger.error({ err: error }, 'error while stopping');
       });
       await producer.disconnect().catch(() => undefined);
+      await redis.quit().catch(() => undefined);
       await db.end().catch(() => undefined);
       process.exit(0);
     })();

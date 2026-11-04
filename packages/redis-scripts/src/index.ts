@@ -1,4 +1,4 @@
-export { keys, parseSeatValue, type SeatState } from './keys.js';
+export { channelId, keys, parseSeatValue, type SeatState } from './keys.js';
 export { RedisScript } from './script.js';
 export {
   deleteHoldRef,
@@ -24,3 +24,14 @@ export {
   type QueueStatus,
   type RateLimitResult,
 } from './queue.js';
+export {
+  markSold,
+  publishSeatsUpdated,
+  publishToUser,
+  type BookingUpdatedMessage,
+  type MarkSoldInput,
+  type QueueUpdatedMessage,
+  type SeatStatusUpdate,
+  type SeatsUpdatedMessage,
+  type UserMessage,
+} from './realtime.js';

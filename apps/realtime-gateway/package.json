@@ -1,0 +1,25 @@
+{
+  "name": "@ticketsurge/realtime-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WebSocket server that forwards Redis Pub/Sub seat, booking, and queue updates",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "dev": "tsx watch --conditions=source src/main.ts | pino-pretty",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^11.3.6",
+    "@ticketsurge/config": "^0.1.0",
+    "@ticketsurge/redis-scripts": "^0.1.0",
+    "fastify": "^5.12.8",
+    "ioredis": "^6.0.0",
+    "jose": "^6.2.15",
+    "ws": "^8.22.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
+  }
+}

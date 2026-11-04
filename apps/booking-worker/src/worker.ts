@@ -7,11 +7,13 @@ import {
   type RunningConsumer,
 } from '@ticketsurge/kafka';
 import { OutboxRelay } from '@ticketsurge/outbox';
+import type { Redis } from 'ioredis';
 import type pg from 'pg';
 import { createSagaHandler } from './saga.js';
+import { createSeatSyncHandler } from './seat-sync.js';
 import { ExpirySweeper, type SweeperSettings } from './sweeper.js';
 
-export const ROLES = ['relay', 'saga', 'sweeper'] as const;
+export const ROLES = ['relay', 'saga', 'sweeper', 'seat-sync'] as const;
 export type Role = (typeof ROLES)[number];
 
 export interface BookingWorkerDeps {
@@ -19,6 +21,8 @@ export interface BookingWorkerDeps {
   kafka: KafkaClient;
   producer: Producer;
   logger: Logger;
+  /** Used by seat-sync. */
+  redis: Redis;
 }
 
 export interface BookingWorkerSettings {
@@ -66,6 +70,20 @@ export async function startBookingWorker(
       logger,
       concurrency: settings.consumerConcurrency,
       handle: createSagaHandler(db, prefix, logger),
+    });
+  }
+
+  if (settings.roles.includes('seat-sync')) {
+    consumers['seat-sync'] = await startConsumer({
+      kafka,
+      groupId: `${prefix}${CONSUMER_GROUPS.seatSync}`,
+      topics: [
+        topicName(prefix, TOPICS.bookingConfirmed),
+        topicName(prefix, TOPICS.bookingCancelled),
+      ],
+      logger,
+      concurrency: settings.consumerConcurrency,
+      handle: createSeatSyncHandler(deps.redis, logger),
     });
   }
 

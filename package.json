@@ -31,6 +31,8 @@
     "start:booking-worker": "npm run start -w @ticketsurge/booking-worker",
     "dev:payment": "npm run dev -w @ticketsurge/payment-service",
     "start:payment": "npm run start -w @ticketsurge/payment-service",
+    "dev:realtime": "npm run dev -w @ticketsurge/realtime-gateway",
+    "start:realtime": "npm run start -w @ticketsurge/realtime-gateway",
     "kafka:topics": "npm run create-topics -w @ticketsurge/scripts",
     "infra:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d --wait",
     "infra:down": "docker compose --env-file .env -f infra/docker-compose.yml down",

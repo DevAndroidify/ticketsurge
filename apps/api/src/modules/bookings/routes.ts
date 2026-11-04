@@ -4,6 +4,7 @@ import {
   extendHoldRef,
   getHold,
   getHoldRef,
+  publishToUser,
   releaseHold,
 } from '@ticketsurge/redis-scripts';
 import { TOPICS, topicName } from '@ticketsurge/events';
@@ -14,7 +15,7 @@ import { z } from 'zod';
 import type { ApiConfig } from '../../config.js';
 import { PG_UNIQUE_VIOLATION, pgErrorInfo } from '../../db.js';
 import { HttpError, badRequest, conflict, notFound } from '../../errors.js';
-import { withRedis } from '../../redis.js';
+import { notify, withRedis } from '../../redis.js';
 import { currentUser } from '../auth/guard.js';
 import {
   createPendingBooking,
@@ -113,6 +114,13 @@ export function bookingRoutes(app: FastifyInstance, options: BookingRoutesOption
           requestedTopic: topicName(config.KAFKA_TOPIC_PREFIX, TOPICS.bookingRequested),
           traceId: request.id,
         });
+        await notify(request.log, () =>
+          publishToUser(redis, user.id, {
+            type: 'booking.updated',
+            bookingId: booking.id,
+            status: 'PENDING_PAYMENT',
+          }),
+        );
         return await reply.code(202).send(accepted(booking));
       } catch (error) {
         const info = pgErrorInfo(error);

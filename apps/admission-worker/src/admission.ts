@@ -1,5 +1,5 @@
 import type { Logger } from '@ticketsurge/config';
-import { admitNext, keys } from '@ticketsurge/redis-scripts';
+import { admitNext, keys, type QueueUpdatedMessage } from '@ticketsurge/redis-scripts';
 import type { Redis } from 'ioredis';
 
 export interface AdmissionSettings {
@@ -37,7 +37,21 @@ export async function runAdmissionTick(
     );
     if (locked !== 'OK') continue;
     const admitted = await admitNext(redis, eventId, settings.batchSize, settings.admissionTtlMs);
-    if (admitted.length > 0) admittedByEvent.set(eventId, admitted);
+    if (admitted.length === 0) continue;
+    admittedByEvent.set(eventId, admitted);
+    // Tell each admitted user. Users still waiting poll GET /events/:id/queue/me for their
+    // position; pushing a new position to everyone in a large queue every round would be costly.
+    const pipeline = redis.pipeline();
+    for (const userId of admitted) {
+      const message: QueueUpdatedMessage = {
+        type: 'queue.updated',
+        eventId,
+        position: 0,
+        admitted: true,
+      };
+      pipeline.publish(keys.userChannel(userId), JSON.stringify(message));
+    }
+    await pipeline.exec();
   }
   return admittedByEvent;
 }

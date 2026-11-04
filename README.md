@@ -47,6 +47,22 @@ curl localhost:3000/health
 
 Admins (emails in `ADMIN_EMAILS`) create events with `POST /admin/events`.
 
+## Live updates (WebSocket)
+
+Connect to `ws://localhost:3001/ws?token=<accessToken>` (realtime-gateway) and send
+`{ "type": "subscribe.event", "eventId": "<id>" }`. You then receive:
+
+| Message           | Fields                        | Sent to                      |
+| ----------------- | ----------------------------- | ---------------------------- |
+| `seats.updated`   | `eventId, seatIds, status`    | everyone subscribed to event |
+| `booking.updated` | `bookingId, status`           | the booking's owner          |
+| `queue.updated`   | `eventId, position, admitted` | the admitted user            |
+
+The gateway forwards Redis Pub/Sub, which does not store messages. **After every connect or
+reconnect, reload the seat map (`GET /events/:id/seats`) and your booking (`GET /bookings/:id`)**;
+anything that happened while you were disconnected is not replayed. Holds that expire on their own
+send no message either; they show as available on the next reload.
+
 Kafka UI: http://localhost:8080
 
 | Command                    | What it does                                    |

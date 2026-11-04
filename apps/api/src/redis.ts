@@ -1,3 +1,4 @@
+import type { FastifyBaseLogger } from 'fastify';
 import type { Redis } from 'ioredis';
 import { HttpError, serviceUnavailable } from './errors.js';
 
@@ -11,6 +12,18 @@ export const redisUnavailable = () =>
  * Runs Redis work for a request. Holds and queue places must never be granted without Redis,
  * so a disconnected client or a connection error becomes 503 instead of a silent fallback.
  */
+/**
+ * Publishes a live update. Best effort: the state change already happened, so a lost notification
+ * must not fail the request. Clients reload state after reconnecting anyway.
+ */
+export async function notify(log: FastifyBaseLogger, publish: () => Promise<void>): Promise<void> {
+  try {
+    await publish();
+  } catch (error) {
+    log.warn({ err: error }, 'live update not published');
+  }
+}
+
 // A function call, so the compiler does not assume the status stays the same across awaits.
 const isReady = (redis: Redis) => redis.status === 'ready';
 

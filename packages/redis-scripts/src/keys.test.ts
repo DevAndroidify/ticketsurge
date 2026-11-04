@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { keys, parseSeatValue } from './keys.js';
+import { channelId, keys, parseSeatValue } from './keys.js';
+
+describe('channelId', () => {
+  it('parses seat and user channels and rejects anything else', () => {
+    expect(channelId(keys.seatsChannel('e1'))).toEqual({ kind: 'seats', id: 'e1' });
+    expect(channelId(keys.userChannel('u1'))).toEqual({ kind: 'user', id: 'u1' });
+    expect(channelId('seats:e1')).toBeUndefined();
+    expect(channelId('other:{x}')).toBeUndefined();
+  });
+});
 
 describe('keys', () => {
   it('wraps the event ID in a hash tag so an event stays in one cluster slot', () => {

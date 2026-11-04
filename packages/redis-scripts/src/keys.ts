@@ -24,7 +24,18 @@ export const keys = {
   admissionTick: (eventId: string) => `admission:{${eventId}}:tick`,
   /** Fixed-window rate-limit counter. */
   rateLimit: (route: string, userId: string) => `rl:${route}:${userId}`,
+  /** Pub/Sub channel for seat changes of one event. */
+  seatsChannel: (eventId: string) => `seats:{${eventId}}`,
+  /** Pub/Sub channel for one user's booking and queue updates. */
+  userChannel: (userId: string) => `user:{${userId}}`,
 } as const;
+
+/** Extracts the ID from a "seats:{id}" or "user:{id}" channel name. */
+export function channelId(channel: string): { kind: 'seats' | 'user'; id: string } | undefined {
+  const match = /^(seats|user):\{([^}]+)\}$/.exec(channel);
+  if (!match?.[1] || !match[2]) return undefined;
+  return { kind: match[1] as 'seats' | 'user', id: match[2] };
+}
 
 export type SeatState = { kind: 'hold'; holdId: string } | { kind: 'sold'; bookingId: string };
 

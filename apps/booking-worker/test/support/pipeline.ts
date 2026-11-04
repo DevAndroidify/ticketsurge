@@ -1,6 +1,7 @@
 // Runs the asynchronous booking pipeline in-process against isolated test topics.
 import { topicName, type AnyEnvelope, type EventType } from '@ticketsurge/events';
 import { createProducer, type Producer } from '@ticketsurge/kafka';
+import { Redis } from 'ioredis';
 import pg from 'pg';
 import {
   startPaymentService,
@@ -35,7 +36,7 @@ function standaloneTypes(): pg.CustomTypesConfig {
 }
 
 export async function startPipeline(options: PipelineOptions = {}): Promise<Pipeline> {
-  const { databaseUrl } = useTestEnv();
+  const { databaseUrl, redisUrl } = useTestEnv();
   const topics = await createTestTopics();
   // The API code loaded in this test process installs a global BIGINT -> number parser. Real
   // workers run in their own processes without it, so give the services pg's default parsing.
@@ -51,7 +52,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   );
   const kafka = testKafka('pipeline-test');
   const producer = await createProducer(kafka);
-  const deps = { db, kafka, producer, logger: testLogger };
+  const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
+  const deps = { db, kafka, producer, logger: testLogger, redis };
 
   const worker = await startBookingWorker(deps, {
     roles: options.roles ?? ['relay', 'saga'],
@@ -97,6 +99,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       await payment?.stop();
       await worker.stop();
       await producer.disconnect();
+      await redis.quit();
       await db.end();
       await topics.cleanup();
     },

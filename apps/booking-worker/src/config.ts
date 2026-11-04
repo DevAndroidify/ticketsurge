@@ -5,6 +5,7 @@ import {
   logLevelSchema,
   nodeEnvSchema,
   postgresUrlSchema,
+  redisUrlSchema,
 } from '@ticketsurge/config';
 import { z } from 'zod';
 import { ROLES } from './worker.js';
@@ -13,6 +14,7 @@ export const bookingWorkerConfigSchema = z.object({
   NODE_ENV: nodeEnvSchema,
   LOG_LEVEL: logLevelSchema,
   DATABASE_URL: postgresUrlSchema,
+  REDIS_URL: redisUrlSchema,
   KAFKA_BROKERS: brokerListSchema,
   KAFKA_CLIENT_ID: z.string().min(1).default('booking-worker'),
   KAFKA_TOPIC_PREFIX: kafkaTopicPrefixSchema,

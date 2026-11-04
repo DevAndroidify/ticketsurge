@@ -4,6 +4,7 @@ import {
   getHold,
   getHoldRef,
   holdSeats,
+  publishSeatsUpdated,
   releaseHold,
   setHoldRef,
 } from '@ticketsurge/redis-scripts';
@@ -13,7 +14,7 @@ import type pg from 'pg';
 import { z } from 'zod';
 import type { ApiConfig } from '../../config.js';
 import { badRequest, conflict, forbidden, notFound } from '../../errors.js';
-import { withRedis } from '../../redis.js';
+import { notify, withRedis } from '../../redis.js';
 import { currentUser } from '../auth/guard.js';
 import { holdHasBooking } from '../bookings/repository.js';
 
@@ -94,6 +95,7 @@ export function holdRoutes(app: FastifyInstance, options: HoldRoutesOptions): vo
           seatIds: result.seatIds,
         });
       }
+      await notify(request.log, () => publishSeatsUpdated(redis, eventId, seatIds, 'held'));
       return reply.code(201).send({
         holdId,
         eventId,
@@ -126,10 +128,13 @@ export function holdRoutes(app: FastifyInstance, options: HoldRoutesOptions): vo
       });
       if (outcome === 'not_owner') return false;
       await deleteHoldRef(redis, holdId);
-      return true;
+      return { eventId, seatIds: hold.seatIds };
     });
 
     if (!released) throw notFound('Hold not found or already expired');
+    await notify(request.log, () =>
+      publishSeatsUpdated(redis, released.eventId, released.seatIds, 'available'),
+    );
     return reply.code(204).send();
   });
 }

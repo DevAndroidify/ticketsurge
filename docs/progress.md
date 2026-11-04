@@ -11,7 +11,7 @@
 | 7     | Kafka and outbox              | Done        |
 | 8     | Payment and saga              | Done        |
 | 9     | Expiry and refunds            | Done        |
-| 10    | Seat sync and live updates    | Not started |
+| 10    | Seat sync and live updates    | Done        |
 | 11    | Tickets and notifications     | Not started |
 | 12    | Retries and dead letters      | Not started |
 | 13    | Analytics and replay          | Not started |
@@ -216,3 +216,31 @@ Notes:
 
 - Topics must exist (`npm run kafka:topics`) before services start: auto-creation is disabled, and a
   send to a missing topic blocks the relay until librdkafka's delivery timeout.
+
+## Phase 10: Seat sync and live updates (done 2026-11-04)
+
+- `markSold` Lua script: seat value becomes `sold:<bookingId>` with no TTL and the hold hash is deleted;
+  safe to repeat, and it overrides a stale Redis hold because PostgreSQL already decided.
+- seat-sync (booking-worker role `seat-sync`, group `seat-sync`): `booking.confirmed` runs markSold;
+  `booking.cancelled` runs releaseHold without an owner check. It updates Redis only (no
+  processed_events), and if Redis is down the consumer retries until it is back.
+- Redis Pub/Sub: `seats:{eventId}` carries `seats.updated` (held / available / sold) from the API (hold,
+  release) and seat-sync (sold, released). `user:{userId}` carries `booking.updated` (API: PENDING_PAYMENT;
+  seat-sync: CONFIRMED / CANCELLED / EXPIRED) and `queue.updated` (admission-worker, on admission).
+  The API's publishes are best effort: a lost notification never fails a request.
+- `apps/realtime-gateway`: WebSocket at `/ws?token=<access token>` (JWT checked before the upgrade, 401
+  otherwise). Clients send `subscribe.event` / `unsubscribe.event`; the gateway PSUBSCRIBEs once to
+  `seats:*` and `user:*` and routes messages to subscribed sockets. It has a subscription limit, ping
+  heartbeat, and `GET /health`.
+- Tests: two connected clients both see a seat go held, available, held, then sold (after payment and
+  seat-sync); booking status reaches only its owner; a failed payment frees the seat for both and the
+  other user can hold it; unsubscribed clients get nothing; bad tokens get 401; markSold is idempotent and
+  cannot be undone by a stale hold's release.
+
+Notes:
+
+- Pub/Sub keeps no history. Clients must reload `GET /events/:id/seats` and `GET /bookings/:id` after
+  every (re)connect (documented in the README).
+- Holds that simply expire (TTL) send no message; clients see them as available on the next reload.
+- Waiting users get `queue.updated` only when admitted; their position comes from polling
+  `GET /events/:id/queue/me` (pushing positions to everyone each round would be expensive).
