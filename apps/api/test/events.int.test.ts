@@ -6,7 +6,15 @@ import {
   DEMO_SECTIONS,
   seedDemoEvent,
 } from '../../../scripts/src/lib/seed.js';
-import { createTestApp, resetDatabase, type TestApp } from './support/integration.js';
+import {
+  TEST_ADMIN_EMAIL,
+  bearer,
+  createTestApp,
+  registerUser,
+  resetDatabase,
+  type TestApp,
+  type TestUser,
+} from './support/integration.js';
 
 interface SeatMap {
   eventId: string;
@@ -107,11 +115,16 @@ describe('POST /admin/events', () => {
     ],
   };
 
-  it('creates the event and its seats when the admin key is valid', async () => {
+  let admin: TestUser;
+  beforeEach(async () => {
+    admin = await registerUser(t, TEST_ADMIN_EMAIL);
+  });
+
+  it('creates the event and its seats for an admin', async () => {
     const response = await t.app.inject({
       method: 'POST',
       url: '/admin/events',
-      headers: { 'x-admin-key': t.config.ADMIN_API_KEY },
+      headers: bearer(admin),
       payload: body,
     });
     expect(response.statusCode, response.body).toBe(201);
@@ -123,15 +136,16 @@ describe('POST /admin/events', () => {
     expect(map.seats.filter((s) => s.section === 'Balcony')).toHaveLength(30);
   });
 
-  it('rejects a missing or wrong admin key with 401 and creates nothing', async () => {
-    for (const headers of [{}, { 'x-admin-key': 'wrong' }]) {
+  it('creates nothing when the caller is not an admin', async () => {
+    const user = await registerUser(t);
+    for (const headers of [{}, bearer(user)]) {
       const response = await t.app.inject({
         method: 'POST',
         url: '/admin/events',
         headers,
         payload: body,
       });
-      expect(response.statusCode).toBe(401);
+      expect([401, 403]).toContain(response.statusCode);
     }
     const { rows } = await t.clients.pg.query('SELECT count(*)::int AS n FROM booking.events');
     expect(rows[0]).toEqual({ n: 0 });
@@ -141,7 +155,7 @@ describe('POST /admin/events', () => {
     const response = await t.app.inject({
       method: 'POST',
       url: '/admin/events',
-      headers: { 'x-admin-key': t.config.ADMIN_API_KEY },
+      headers: bearer(admin),
       payload: { ...body, sections: [{ ...body.sections[0], rows: ['A', 'A'] }] },
     });
     expect(response.statusCode).toBe(400);

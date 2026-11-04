@@ -5,6 +5,9 @@ import type { ApiConfig } from './config.js';
 import { registerErrorHandler } from './errors.js';
 import type { HealthCheck } from './health/run-checks.js';
 import { adminRoutes } from './modules/admin/routes.js';
+import { registerAuth } from './modules/auth/guard.js';
+import { authRoutes } from './modules/auth/routes.js';
+import { TokenService } from './modules/auth/tokens.js';
 import { eventRoutes } from './modules/events/routes.js';
 import { healthRoutes } from './routes/health.js';
 
@@ -15,6 +18,15 @@ export interface AppDeps {
   healthChecks: Record<string, HealthCheck>;
 }
 
+export function tokenServiceFrom(config: ApiConfig): TokenService {
+  return new TokenService({
+    secret: config.JWT_SECRET,
+    issuer: config.JWT_ISSUER,
+    audience: config.JWT_AUDIENCE,
+    ttlSeconds: config.JWT_TTL_SECONDS,
+  });
+}
+
 /** Builds the Fastify app without listening, so tests can use app.inject(). */
 export async function buildApp({ logger, config, db, healthChecks }: AppDeps) {
   // Typed as Fastify's base logger so route modules can take a plain FastifyInstance.
@@ -22,12 +34,16 @@ export async function buildApp({ logger, config, db, healthChecks }: AppDeps) {
   const app = Fastify({ loggerInstance, bodyLimit: 1024 * 1024 });
   registerErrorHandler(app);
 
+  const tokens = tokenServiceFrom(config);
+  const { requireAdmin } = registerAuth(app, tokens, config.ADMIN_EMAILS);
+
   await app.register(healthRoutes, {
     checks: healthChecks,
     timeoutMs: config.HEALTH_CHECK_TIMEOUT_MS,
   });
+  authRoutes(app, { db, tokens });
   eventRoutes(app, { db });
-  adminRoutes(app, { db, adminApiKey: config.ADMIN_API_KEY });
+  adminRoutes(app, { db, requireAdmin });
 
   return app;
 }

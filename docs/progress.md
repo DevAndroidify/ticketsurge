@@ -4,7 +4,7 @@
 | ----- | ----------------------------- | ----------- |
 | 1     | Project setup                 | Done        |
 | 2     | Events and seats              | Done        |
-| 3     | Auth                          | Not started |
+| 3     | Auth                          | Done        |
 | 4     | Seat holds                    | Not started |
 | 5     | Bookings and final protection | Not started |
 | 6     | Virtual queue and rate limits | Not started |
@@ -53,3 +53,19 @@ Decisions:
 
 - `POST /admin/events` is protected by an `x-admin-key` header (`ADMIN_API_KEY`) until auth exists.
 - Kafka client logs go to pino at debug level, because librdkafka logs every reconnect while a broker is down.
+
+## Phase 3: Auth (done 2026-11-04)
+
+- `migrations/0002_users.sql`: `booking.users` (lowercased unique email, password hash).
+- `POST /auth/register` (201, 409 on duplicate email) and `POST /auth/login` (200, identical 401 for wrong
+  password and unknown email; unknown emails still run one scrypt verification so timing does not leak).
+- Passwords: Node's built-in scrypt (N=16384, r=8, p=1), random salt, parameters stored in the hash.
+- Access tokens: HS256 JWT via `jose` with issuer, audience, and expiry; only HS256 is accepted.
+- `authenticate` and `requireAdmin` guards. Admins are users whose email is in `ADMIN_EMAILS`.
+- Test: every protected route returns 401 for no header, a non-Bearer scheme, an empty token, garbage,
+  an expired token, and a token signed with another secret.
+
+Decisions:
+
+- The brief's `booking.users` has no role column, so admin access uses an `ADMIN_EMAILS` allowlist. This
+  replaces the Phase 2 `x-admin-key` header.

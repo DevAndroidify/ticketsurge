@@ -9,7 +9,8 @@ export function unitTestConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
     DATABASE_URL: 'postgres://unit:unit@127.0.0.1:1/unit',
     REDIS_URL: 'redis://127.0.0.1:1/0',
     KAFKA_BROKERS: '127.0.0.1:1',
-    ADMIN_API_KEY: 'unit-test-admin-key-0123456789',
+    JWT_SECRET: 'unit-test-jwt-secret-0123456789abcdef',
+    ADMIN_EMAILS: 'admin@example.com',
   });
   return { ...base, ...overrides };
 }
