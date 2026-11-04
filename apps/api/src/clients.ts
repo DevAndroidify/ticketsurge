@@ -1,8 +1,10 @@
 import confluent, { type KafkaJS } from '@confluentinc/kafka-javascript';
 import type { Logger } from '@ticketsurge/config';
 import { Redis } from 'ioredis';
-import pg from 'pg';
+import type pg from 'pg';
 import type { ApiConfig } from './config.js';
+import { createPool } from './db.js';
+import { kafkaLogger } from './kafka-logger.js';
 
 const { Kafka, logLevel } = confluent.KafkaJS;
 
@@ -24,11 +26,8 @@ type ClientConfig = Pick<
  * which dependency is down.
  */
 export function createClients(config: ClientConfig, logger: Logger): Clients {
-  const pool = new pg.Pool({
-    connectionString: config.DATABASE_URL,
-    // Fail fast instead of waiting forever when PostgreSQL is unreachable.
-    connectionTimeoutMillis: config.HEALTH_CHECK_TIMEOUT_MS,
-  });
+  // Fail fast instead of waiting forever when PostgreSQL is unreachable.
+  const pool = createPool(config.DATABASE_URL, config.HEALTH_CHECK_TIMEOUT_MS);
   // An idle client can error when the server restarts; without a listener this crashes the process.
   pool.on('error', (error) => {
     logger.warn({ err: error }, 'postgres idle client error');
@@ -52,7 +51,7 @@ export function createClients(config: ClientConfig, logger: Logger): Clients {
       clientId: config.KAFKA_CLIENT_ID,
       connectionTimeout: config.HEALTH_CHECK_TIMEOUT_MS,
       requestTimeout: config.HEALTH_CHECK_TIMEOUT_MS,
-      // librdkafka logs every reconnect attempt; the health endpoint already reports outages.
+      logger: kafkaLogger(logger),
       logLevel: logLevel.ERROR,
     },
   });

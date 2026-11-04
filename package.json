@@ -9,12 +9,15 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "scripts"
   ],
   "scripts": {
     "build": "tsc -b",
     "clean": "tsc -b --clean",
-    "typecheck": "tsc -p packages/config && tsc -p apps/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:migrate": "npm run migrate -w @ticketsurge/scripts",
+    "db:seed": "npm run seed -w @ticketsurge/scripts",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
     "test": "vitest run --project unit",

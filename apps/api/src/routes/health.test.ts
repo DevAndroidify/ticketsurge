@@ -1,5 +1,7 @@
 import { createLogger } from '@ticketsurge/config';
+import type pg from 'pg';
 import { describe, expect, it } from 'vitest';
+import { unitTestConfig } from '../../test/support/config.js';
 import { buildApp } from '../app.js';
 import type { HealthCheck } from '../health/run-checks.js';
 
@@ -8,7 +10,13 @@ const up: HealthCheck = () => Promise.resolve();
 const down: HealthCheck = () => Promise.reject(new Error('ECONNREFUSED'));
 
 async function getHealth(checks: Record<string, HealthCheck>) {
-  const app = await buildApp({ logger, healthChecks: checks, healthCheckTimeoutMs: 100 });
+  const app = await buildApp({
+    logger,
+    config: unitTestConfig({ HEALTH_CHECK_TIMEOUT_MS: 100 }),
+    // Health checks are faked, so the routes never touch the database.
+    db: {} as pg.Pool,
+    healthChecks: checks,
+  });
   try {
     return await app.inject({ method: 'GET', url: '/health' });
   } finally {

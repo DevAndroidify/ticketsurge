@@ -3,7 +3,7 @@
 | Phase | Name                          | Status      |
 | ----- | ----------------------------- | ----------- |
 | 1     | Project setup                 | Done        |
-| 2     | Events and seats              | Not started |
+| 2     | Events and seats              | Done        |
 | 3     | Auth                          | Not started |
 | 4     | Seat holds                    | Not started |
 | 5     | Bookings and final protection | Not started |
@@ -36,3 +36,20 @@ Decisions and deviations:
 - Host ports default to 5433 (PostgreSQL) and 6380 (Redis) to avoid other local instances; configurable in `.env`.
 - Kafka and Kafka UI JVM heaps are capped, because the WSL VM has about 3.9 GB RAM.
 - `npm audit` reports 12 moderate advisories, all in dev-only lint tooling (minimatch via eslint); none in runtime dependencies.
+
+## Phase 2: Events and seats (done 2026-11-04)
+
+- `migrations/0001_events_and_seats.sql`: `booking` schema, `booking.events`, `booking.seats`
+  (unique seat position per event, prices in minor units).
+- `scripts` workspace: migration runner (`npm run db:migrate`; ordered, one transaction per file,
+  advisory lock, checksum check against edited migrations) and idempotent seed (`npm run db:seed`,
+  demo event `7c1f0b8e-5d2a-4c3e-9f4a-0d1e2b3c4a50` with 5 sections x 10 rows x 10 seats = 500 seats).
+- `GET /events`, `GET /events/:id`, `GET /events/:id/seats`, `POST /admin/events` (Zod-validated layout,
+  event + seats inserted in one transaction, max 20,000 seats).
+- Consistent error body `{ error: { code, message, details? } }`; Zod errors become 400.
+- Integration tests use a separate `<db>_test` database and Redis DB 1, created and migrated by Vitest global setup.
+
+Decisions:
+
+- `POST /admin/events` is protected by an `x-admin-key` header (`ADMIN_API_KEY`) until auth exists.
+- Kafka client logs go to pino at debug level, because librdkafka logs every reconnect while a broker is down.

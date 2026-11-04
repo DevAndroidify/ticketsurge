@@ -26,22 +26,26 @@ npm install
 cp .env.example .env        # then change the passwords
 npm run infra:up            # PostgreSQL, Redis, Kafka, Kafka UI; waits until all are healthy
 npm run build
+npm run db:migrate          # apply SQL migrations
+npm run db:seed             # demo event with 500 seats
 npm run dev:api             # http://localhost:3000
 curl localhost:3000/health
 ```
 
 Kafka UI: http://localhost:8080
 
-| Command                    | What it does                                     |
-| -------------------------- | ------------------------------------------------ |
-| `npm run infra:up`         | Start the containers and wait for health checks  |
-| `npm run infra:down`       | Stop the containers (data is kept)               |
-| `npm run infra:reset`      | Stop the containers and delete their volumes     |
-| `npm run build`            | Compile every workspace (`tsc -b`)               |
-| `npm run typecheck`        | Type-check sources and tests                     |
-| `npm run lint`             | ESLint (type-aware) and Prettier check           |
-| `npm test`                 | Unit tests                                       |
-| `npm run test:integration` | Tests against the running containers             |
+| Command                    | What it does                                    |
+| -------------------------- | ----------------------------------------------- |
+| `npm run infra:up`         | Start the containers and wait for health checks |
+| `npm run infra:down`       | Stop the containers (data is kept)              |
+| `npm run infra:reset`      | Stop the containers and delete their volumes    |
+| `npm run build`            | Compile every workspace (`tsc -b`)              |
+| `npm run db:migrate`       | Apply pending SQL migrations                    |
+| `npm run db:seed`          | Create the 500-seat demo event (idempotent)     |
+| `npm run typecheck`        | Type-check sources and tests                    |
+| `npm run lint`             | ESLint (type-aware) and Prettier check          |
+| `npm test`                 | Unit tests                                      |
+| `npm run test:integration` | Tests against the running containers            |
 
 ## Local vs production-style Kafka settings
 

@@ -25,7 +25,8 @@ async function main(): Promise<void> {
 
   const app = await buildApp({
     logger,
-    healthCheckTimeoutMs: config.HEALTH_CHECK_TIMEOUT_MS,
+    config,
+    db: clients.pg,
     healthChecks: {
       postgres: postgresCheck(clients.pg),
       redis: redisCheck(clients.redis, config.HEALTH_CHECK_TIMEOUT_MS),

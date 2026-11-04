@@ -5,6 +5,7 @@
   "description": "TicketSurge HTTP API",
   "type": "module",
   "scripts": {
+    "typecheck": "tsc -p .",
     "dev": "tsx watch --conditions=source src/main.ts | pino-pretty",
     "start": "node dist/main.js"
   },
@@ -13,7 +14,8 @@
     "@ticketsurge/config": "^0.1.0",
     "fastify": "^5.12.8",
     "ioredis": "^6.0.0",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"

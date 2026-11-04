@@ -13,7 +13,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['{apps,packages}/*/src/**/*.test.ts'],
+          include: ['{apps/*,packages/*,scripts}/src/**/*.test.ts'],
         },
       },
       {
@@ -21,7 +21,9 @@ export default defineConfig({
         test: {
           name: 'integration',
           environment: 'node',
-          include: ['{apps,packages}/*/test/**/*.int.test.ts'],
+          include: ['{apps/*,packages/*,scripts}/test/**/*.int.test.ts'],
+          // Creates and migrates the test database (<db>_test) once per run.
+          globalSetup: ['scripts/src/testing/global-setup.ts'],
           // Integration tests share real containers; run files one at a time.
           fileParallelism: false,
           testTimeout: 30_000,

@@ -1,0 +1,15 @@
+{
+  "name": "@ticketsurge/scripts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Operational scripts: migrations, seeding, and test database setup",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "migrate": "tsx --conditions=source src/cli/migrate.ts",
+    "seed": "tsx --conditions=source src/cli/seed.ts"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}
