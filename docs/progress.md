@@ -9,7 +9,7 @@
 | 5     | Bookings and final protection | Done        |
 | 6     | Virtual queue and rate limits | Done        |
 | 7     | Kafka and outbox              | Done        |
-| 8     | Payment and saga              | Not started |
+| 8     | Payment and saga              | Done        |
 | 9     | Expiry and refunds            | Not started |
 | 10    | Seat sync and live updates    | Not started |
 | 11    | Tickets and notifications     | Not started |
@@ -162,3 +162,32 @@ Decisions:
   creates its own `test.<random>.` topics, so tests never mix with development traffic.
 - Until Phase 12, a failing handler is retried in place with backoff and a malformed message is
   logged and skipped; Phase 12 replaces both with bounded retries and dead-letter topics.
+
+## Phase 8: Payment and saga (done 2026-11-04)
+
+- `migrations/0005_payments_and_saga.sql`: `booking.processed_events`, and the `payment` schema
+  (`payments` with unique `booking_id`, `outbox`, `processed_events`).
+- `packages/outbox`: `processOnce`, the brief's idempotent-consumer pattern (claim the messageId,
+  apply the change and new outbox rows, commit; duplicates roll back).
+- `apps/payment-service`: consumes `booking.requested`, waits `PAYMENT_DELAY_MS` (outside any
+  transaction), fails `PAYMENT_FAILURE_RATE` of charges, and writes the payment plus
+  `payment.completed` in one transaction. It runs its own outbox relay.
+- booking saga (in booking-worker, role `saga`): consumes `payment.completed`. Success confirms with
+  `WHERE status = 'PENDING_PAYMENT' AND expires_at > now()` and publishes `booking.confirmed`. Failure
+  cancels, deactivates the booking's seats in the same transaction, and publishes `booking.cancelled`.
+- `BOOKING_WORKER_ROLES` picks which parts run in a process (relay, saga).
+- Tests: success confirms (payment SUCCEEDED, seats active, `booking.confirmed` published); failure
+  cancels and deactivates seats (`booking.cancelled`, seats bookable again in PostgreSQL); a
+  duplicated `payment.completed` is applied once and a later conflicting result cannot undo a
+  confirmation; a redelivered `booking.requested` charges once. Also verified live with all four
+  processes (6 bookings at a 50% failure rate: 4 confirmed, 2 cancelled, lag 0).
+
+Fixed during this phase:
+
+- The live run found a bug the tests had hidden: `pg` returns BIGINT as a string, the API installs a
+  global parser but the worker does not, so the saga's `booking.confirmed` failed validation and
+  retried forever. The saga now casts in SQL, and the test pipeline uses pg's default parsing so
+  the tests behave like the standalone service (verified: the old code now fails the test).
+- Several workspaces had lost declared dependencies during sequential `npm install -w` calls (hidden
+  by hoisting). Every package.json now declares exactly what it imports.
+- Each service now uses its own Kafka client ID (removed the shared `KAFKA_CLIENT_ID` from `.env`).

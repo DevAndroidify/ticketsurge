@@ -8,5 +8,11 @@
     "typecheck": "tsc -p .",
     "dev": "tsx watch --conditions=source src/main.ts | pino-pretty",
     "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@ticketsurge/config": "^0.1.0",
+    "@ticketsurge/redis-scripts": "^0.1.0",
+    "ioredis": "^6.0.0",
+    "zod": "^4.6.7"
   }
 }
