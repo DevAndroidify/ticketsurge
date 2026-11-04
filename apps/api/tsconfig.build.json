@@ -11,6 +11,9 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     { "path": "../../packages/config/tsconfig.build.json" },
-    { "path": "../../packages/redis-scripts/tsconfig.build.json" }
+    { "path": "../../packages/redis-scripts/tsconfig.build.json" },
+    { "path": "../../packages/events/tsconfig.build.json" },
+    { "path": "../../packages/kafka/tsconfig.build.json" },
+    { "path": "../../packages/outbox/tsconfig.build.json" }
   ]
 }

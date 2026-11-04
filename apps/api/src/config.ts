@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   brokerListSchema,
   durationMsSchema,
+  kafkaTopicPrefixSchema,
   logLevelSchema,
   nodeEnvSchema,
   portSchema,
@@ -18,6 +19,8 @@ export const apiConfigSchema = z.object({
   REDIS_URL: redisUrlSchema,
   KAFKA_BROKERS: brokerListSchema,
   KAFKA_CLIENT_ID: z.string().min(1).default('ticketsurge-api'),
+  // Prepended to every topic name. Empty in normal use; tests use a unique prefix per run.
+  KAFKA_TOPIC_PREFIX: kafkaTopicPrefixSchema,
   HEALTH_CHECK_TIMEOUT_MS: durationMsSchema.default(2000),
   // HS256 signing key. 32+ characters so it cannot be brute-forced from a captured token.
   JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),

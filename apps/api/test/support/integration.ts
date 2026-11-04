@@ -100,7 +100,33 @@ export async function createTestApp(overrides: Partial<ApiConfig> = {}): Promise
 
 /** Empties every booking table. Integration test files run one at a time, so this is safe. */
 export async function resetDatabase(db: pg.Pool): Promise<void> {
-  await db.query('TRUNCATE booking.events, booking.users CASCADE');
+  await db.query('TRUNCATE booking.events, booking.users, booking.outbox CASCADE');
+}
+
+/** Admits the user, holds the seats, and creates a PENDING_PAYMENT booking through the API. */
+export async function bookSeats(
+  t: TestApp,
+  user: TestUser,
+  eventId: string,
+  seatIds: string[],
+): Promise<{ bookingId: string; holdId: string }> {
+  await admit(t, eventId, user.id);
+  const hold = await t.app.inject({
+    method: 'POST',
+    url: `/events/${eventId}/holds`,
+    headers: bearer(user),
+    payload: { seatIds },
+  });
+  if (hold.statusCode !== 201) throw new Error(`hold failed: ${hold.body}`);
+  const { holdId } = hold.json<{ holdId: string }>();
+  const booking = await t.app.inject({
+    method: 'POST',
+    url: '/bookings',
+    headers: { ...bearer(user), 'idempotency-key': randomUUID() },
+    payload: { holdId },
+  });
+  if (booking.statusCode !== 202) throw new Error(`booking failed: ${booking.body}`);
+  return { bookingId: booking.json<{ bookingId: string }>().bookingId, holdId };
 }
 
 /** Flushes the test Redis DB. Refuses to touch any other DB. */

@@ -8,7 +8,7 @@
 | 4     | Seat holds                    | Done        |
 | 5     | Bookings and final protection | Done        |
 | 6     | Virtual queue and rate limits | Done        |
-| 7     | Kafka and outbox              | Not started |
+| 7     | Kafka and outbox              | Done        |
 | 8     | Payment and saga              | Not started |
 | 9     | Expiry and refunds            | Not started |
 | 10    | Seat sync and live updates    | Not started |
@@ -134,3 +134,31 @@ Decisions:
 - Added a `joinQueue` Lua script (not in the brief's list) so joining is atomic.
 - The worker finds events through a Redis set `queues:active`, so it needs no access to the booking
   schema.
+
+## Phase 7: Kafka and outbox (done 2026-11-04)
+
+- `packages/events`: topic names, the versioned envelope, and a Zod schema per event type; validated on
+  publish (`createEnvelope`) and on consume (`parseEnvelope`). All messages are keyed by bookingId.
+- `packages/kafka`: client factory, producer with `acks=all` and idempotence, topic creation, and a
+  consumer runner that commits offsets manually after the handler succeeds.
+- `packages/outbox`: `insertOutboxMessage` (same transaction as the data change), `OutboxRelay`
+  (publishes unpublished rows in id order, then sets `published_at`; an advisory lock keeps it to one
+  active relay per table), and `outboxBacklog`.
+- `migrations/0004_booking_outbox.sql`: `booking.outbox` as in the brief, plus a partial index on
+  unpublished rows.
+- `POST /bookings` now writes the `booking.requested` outbox row in the booking transaction.
+- `apps/booking-worker`: runs the booking outbox relay.
+- `npm run kafka:topics`: creates the six topics (6 partitions, 7-day retention, replication factor from
+  `KAFKA_REPLICATION_FACTOR`; `min.insync.replicas` becomes 2 at replication factor 3).
+- Tests: a booking's message appears in `booking.requested` with the right key, headers, and data;
+  with the relay stopped it waits in the outbox and is delivered once the relay starts; a Kafka failure
+  leaves rows unpublished; two racing relays publish each row once; a rejected booking writes no message.
+  Also verified live: booking created with booking-worker stopped, published after it started, read
+  back with `kafka-console-consumer`.
+
+Decisions:
+
+- `KAFKA_TOPIC_PREFIX` (empty by default) prefixes topics and consumer groups. Each Kafka test file
+  creates its own `test.<random>.` topics, so tests never mix with development traffic.
+- Until Phase 12, a failing handler is retried in place with backoff and a malformed message is
+  logged and skipped; Phase 12 replaces both with bounded retries and dead-letter topics.

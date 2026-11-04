@@ -1,0 +1,29 @@
+{
+  "name": "@ticketsurge/outbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Transactional outbox relay and idempotent-consumer helpers shared by all services",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@ticketsurge/config": "^0.1.0",
+    "@ticketsurge/events": "^0.1.0",
+    "@ticketsurge/kafka": "^0.1.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}

@@ -1,3 +1,5 @@
+import { TOPICS, createEnvelope } from '@ticketsurge/events';
+import { insertOutboxMessage } from '@ticketsurge/outbox';
 import type pg from 'pg';
 import { withTransaction } from '../../db.js';
 
@@ -46,12 +48,15 @@ export interface CreateBookingInput {
   seatIds: readonly string[];
   idempotencyKey: string;
   paymentDeadlineMs: number;
+  /** Full Kafka topic name for booking.requested (includes any test prefix). */
+  requestedTopic: string;
+  traceId: string;
 }
 
 /**
- * Inserts the booking as PENDING_PAYMENT together with its active seats in one transaction.
- * If another active booking already has one of the seats, the partial unique index
- * one_active_booking_per_seat rejects the insert and nothing is written.
+ * Inserts the booking as PENDING_PAYMENT, its active seats, and its booking.requested outbox row in
+ * one transaction. If another active booking already has one of the seats, the partial unique index
+ * one_active_booking_per_seat rejects the insert and nothing is written, not even the message.
  */
 export async function createPendingBooking(
   db: pg.Pool,
@@ -89,6 +94,21 @@ export async function createPendingBooking(
        SELECT $1, $2, unnest($3::uuid[])`,
       [booking.id, input.eventId, input.seatIds],
     );
+
+    const envelope = createEnvelope(
+      TOPICS.bookingRequested,
+      {
+        bookingId: booking.id,
+        eventId: input.eventId,
+        userId: input.userId,
+        holdId: input.holdId,
+        seatIds: [...input.seatIds],
+        amountMinor: booking.amountMinor,
+        expiresAt: booking.expiresAt.toISOString(),
+      },
+      { traceId: input.traceId },
+    );
+    await insertOutboxMessage(client, 'booking.outbox', input.requestedTopic, envelope);
     return booking;
   });
 }

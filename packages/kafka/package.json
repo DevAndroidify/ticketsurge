@@ -1,0 +1,25 @@
+{
+  "name": "@ticketsurge/kafka",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kafka producer, consumer, and topic helpers on @confluentinc/kafka-javascript",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@confluentinc/kafka-javascript": "^1.11.0",
+    "@ticketsurge/config": "^0.1.0",
+    "@ticketsurge/events": "^0.1.0"
+  }
+}

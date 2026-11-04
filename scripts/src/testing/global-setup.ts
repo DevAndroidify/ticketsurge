@@ -1,6 +1,7 @@
 // Vitest global setup for the integration project: creates and migrates the test database once.
 import pg from 'pg';
 import { runMigrations } from '../lib/migrations.js';
+import { deleteAllTestTopics } from './kafka.js';
 import { useTestEnv } from './test-env.js';
 
 export default async function setup(): Promise<void> {
@@ -27,4 +28,7 @@ export default async function setup(): Promise<void> {
   } finally {
     await pool.end();
   }
+
+  // Each Kafka test file creates its own topics; remove any left by interrupted runs.
+  await deleteAllTestTopics();
 }

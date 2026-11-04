@@ -1,17 +1,14 @@
-import confluent, { type KafkaJS } from '@confluentinc/kafka-javascript';
 import type { Logger } from '@ticketsurge/config';
+import { createKafka, type Admin } from '@ticketsurge/kafka';
 import { Redis } from 'ioredis';
 import type pg from 'pg';
 import type { ApiConfig } from './config.js';
 import { createPool } from './db.js';
-import { kafkaLogger } from './kafka-logger.js';
-
-const { Kafka, logLevel } = confluent.KafkaJS;
 
 export interface Clients {
   pg: pg.Pool;
   redis: Redis;
-  kafkaAdmin: KafkaJS.Admin;
+  kafkaAdmin: Admin;
   close(): Promise<void>;
 }
 
@@ -51,15 +48,11 @@ export function createClients(config: ClientConfig, logger: Logger): Clients {
     logger.warn({ err: error }, 'redis connection error');
   });
 
-  const kafka = new Kafka({
-    kafkaJS: {
-      brokers: config.KAFKA_BROKERS,
-      clientId: config.KAFKA_CLIENT_ID,
-      connectionTimeout: config.HEALTH_CHECK_TIMEOUT_MS,
-      requestTimeout: config.HEALTH_CHECK_TIMEOUT_MS,
-      logger: kafkaLogger(logger),
-      logLevel: logLevel.ERROR,
-    },
+  const kafka = createKafka({
+    brokers: config.KAFKA_BROKERS,
+    clientId: config.KAFKA_CLIENT_ID,
+    logger,
+    timeoutMs: config.HEALTH_CHECK_TIMEOUT_MS,
   });
   const kafkaAdmin = kafka.admin();
 

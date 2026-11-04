@@ -88,6 +88,12 @@ export const redisUrlSchema = z
   .url()
   .refine((value) => /^rediss?:\/\//.test(value), 'must start with redis:// or rediss://');
 
+/** Prepended to every Kafka topic and consumer group. Empty normally; tests use a unique prefix. */
+export const kafkaTopicPrefixSchema = z
+  .string()
+  .regex(/^[a-z0-9._-]*$/, 'lowercase letters, digits, ".", "_" and "-" only')
+  .default('');
+
 /** Comma-separated host:port list, e.g. "localhost:9092,broker2:9092". */
 export const brokerListSchema = z
   .string()

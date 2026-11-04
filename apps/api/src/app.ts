@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Logger } from '@ticketsurge/config';
 import Fastify, { type FastifyBaseLogger } from 'fastify';
 import type { Redis } from 'ioredis';
@@ -37,7 +38,12 @@ export function tokenServiceFrom(config: ApiConfig): TokenService {
 export async function buildApp({ logger, config, db, redis, healthChecks }: AppDeps) {
   // Typed as Fastify's base logger so route modules can take a plain FastifyInstance.
   const loggerInstance: FastifyBaseLogger = logger;
-  const app = Fastify({ loggerInstance, bodyLimit: 1024 * 1024 });
+  const app = Fastify({
+    loggerInstance,
+    bodyLimit: 1024 * 1024,
+    // Unique across processes; becomes the traceId of events this request produces.
+    genReqId: () => randomUUID(),
+  });
   registerErrorHandler(app);
 
   const tokens = tokenServiceFrom(config);

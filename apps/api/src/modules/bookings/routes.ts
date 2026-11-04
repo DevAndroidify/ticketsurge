@@ -6,6 +6,7 @@ import {
   getHoldRef,
   releaseHold,
 } from '@ticketsurge/redis-scripts';
+import { TOPICS, topicName } from '@ticketsurge/events';
 import type { FastifyInstance, preHandlerAsyncHookHandler } from 'fastify';
 import type { Redis } from 'ioredis';
 import type pg from 'pg';
@@ -25,7 +26,7 @@ import {
 export interface BookingRoutesOptions {
   db: pg.Pool;
   redis: Redis;
-  config: Pick<ApiConfig, 'PAYMENT_DEADLINE_MS' | 'HOLD_AFTER_DEADLINE_MS'>;
+  config: Pick<ApiConfig, 'PAYMENT_DEADLINE_MS' | 'HOLD_AFTER_DEADLINE_MS' | 'KAFKA_TOPIC_PREFIX'>;
   authenticate: preHandlerAsyncHookHandler;
   bookingRateLimit: preHandlerAsyncHookHandler;
 }
@@ -99,7 +100,8 @@ export function bookingRoutes(app: FastifyInstance, options: BookingRoutesOption
         return { eventId: ref, seatIds: hold.seatIds };
       });
 
-      // c: booking, its seats, in one transaction. d: the unique index is the final protection.
+      // c: booking, its seats, and the booking.requested outbox row in one transaction.
+      // d: the unique index is the final protection.
       try {
         const booking = await createPendingBooking(db, {
           eventId,
@@ -108,6 +110,8 @@ export function bookingRoutes(app: FastifyInstance, options: BookingRoutesOption
           seatIds,
           idempotencyKey: key,
           paymentDeadlineMs: config.PAYMENT_DEADLINE_MS,
+          requestedTopic: topicName(config.KAFKA_TOPIC_PREFIX, TOPICS.bookingRequested),
+          traceId: request.id,
         });
         return await reply.code(202).send(accepted(booking));
       } catch (error) {

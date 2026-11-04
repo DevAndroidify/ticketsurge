@@ -1,9 +1,7 @@
-import type { KafkaJS } from '@confluentinc/kafka-javascript';
+import type { Admin } from '@ticketsurge/kafka';
 import type { Redis } from 'ioredis';
 import type { Pool } from 'pg';
 import type { HealthCheck } from './run-checks.js';
-
-type Admin = KafkaJS.Admin;
 
 /** Runs a trivial query, which needs a pooled connection and a responsive server. */
 export function postgresCheck(pool: Pool): HealthCheck {

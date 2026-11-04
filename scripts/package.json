@@ -7,9 +7,14 @@
   "scripts": {
     "typecheck": "tsc -p .",
     "migrate": "tsx --conditions=source src/cli/migrate.ts",
-    "seed": "tsx --conditions=source src/cli/seed.ts"
+    "seed": "tsx --conditions=source src/cli/seed.ts",
+    "create-topics": "tsx --conditions=source src/cli/create-topics.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"
+  },
+  "dependencies": {
+    "@ticketsurge/events": "^0.1.0",
+    "@ticketsurge/kafka": "^0.1.0"
   }
 }

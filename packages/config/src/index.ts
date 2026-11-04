@@ -2,6 +2,7 @@ export {
   ConfigError,
   brokerListSchema,
   durationMsSchema,
+  kafkaTopicPrefixSchema,
   loadConfig,
   loadEnvFile,
   logLevelSchema,
