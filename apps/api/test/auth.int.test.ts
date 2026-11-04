@@ -17,6 +17,8 @@ const PROTECTED_ROUTES: { method: 'GET' | 'POST' | 'DELETE'; url: string }[] = [
   { method: 'POST', url: '/admin/events' },
   { method: 'POST', url: '/events/7c1f0b8e-5d2a-4c3e-9f4a-0d1e2b3c4a50/holds' },
   { method: 'DELETE', url: '/holds/7c1f0b8e-5d2a-4c3e-9f4a-0d1e2b3c4a50' },
+  { method: 'POST', url: '/bookings' },
+  { method: 'GET', url: '/bookings/7c1f0b8e-5d2a-4c3e-9f4a-0d1e2b3c4a50' },
 ];
 
 let t: TestApp;

@@ -15,6 +15,7 @@ import type { ApiConfig } from '../../config.js';
 import { badRequest, conflict, forbidden, notFound } from '../../errors.js';
 import { withRedis } from '../../redis.js';
 import { currentUser } from '../auth/guard.js';
+import { holdHasBooking } from '../bookings/repository.js';
 
 export interface HoldRoutesOptions {
   db: pg.Pool;
@@ -101,6 +102,11 @@ export function holdRoutes(app: FastifyInstance, options: HoldRoutesOptions): vo
   app.delete('/holds/:holdId', { preHandler: authenticate }, async (request, reply) => {
     const user = currentUser(request);
     const { holdId } = holdParams.parse(request.params);
+
+    // Once booked, the seats belong to the booking; releasing them would invite a doomed double booking.
+    if (await holdHasBooking(db, holdId)) {
+      throw conflict('HOLD_BOOKED', 'This hold has a booking and can no longer be released');
+    }
 
     const released = await withRedis(redis, async () => {
       const eventId = await getHoldRef(redis, holdId);

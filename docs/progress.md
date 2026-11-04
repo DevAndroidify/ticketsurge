@@ -6,7 +6,7 @@
 | 2     | Events and seats              | Done        |
 | 3     | Auth                          | Done        |
 | 4     | Seat holds                    | Done        |
-| 5     | Bookings and final protection | Not started |
+| 5     | Bookings and final protection | Done        |
 | 6     | Virtual queue and rate limits | Not started |
 | 7     | Kafka and outbox              | Not started |
 | 8     | Payment and saga              | Not started |
@@ -91,3 +91,24 @@ Decisions:
 - Holds are rejected with 403 `SALE_NOT_OPEN` before `sale_starts_at` or for non-published events.
 - The Redis client fails fast while disconnected (offline queue off, 1s command timeout), so holds
   return 503 instead of waiting.
+
+## Phase 5: Bookings and final protection (done 2026-11-04)
+
+- `migrations/0003_bookings.sql`: `booking.bookings` (unique `hold_id`, unique `(user_id, idempotency_key)`)
+  and `booking.booking_seats` with the partial unique index `one_active_booking_per_seat`. Composite
+  foreign keys keep a booked seat inside its booking's event.
+- `POST /bookings` (Idempotency-Key header required): checks the hold exists and belongs to the user,
+  runs extendHold to the payment deadline + 1 minute (409 if gone), then inserts the PENDING_PAYMENT
+  booking and its active seats in one transaction, priced from the database. A unique-index rejection
+  returns 409 `SEAT_TAKEN` and releases the hold. Returns 202 with bookingId.
+- Idempotency: the same key + hold returns the same booking (also under 20 concurrent requests); the same
+  key with a different hold returns 422; a second key for an already booked hold returns 409.
+- `GET /bookings/:id` (owner only, 404 otherwise) with its seats.
+- The seat map now takes booked seats from PostgreSQL (CONFIRMED = sold, PENDING_PAYMENT = held), so it
+  stays correct even when Redis is down. `DELETE /holds/:holdId` returns 409 once the hold is booked.
+- Tests: a repeated key returns one booking; a direct duplicate active seat insert fails with
+  `one_active_booking_per_seat`; after Redis loses its state, a second buyer's booking is rejected by PostgreSQL.
+
+Notes:
+
+- The `booking.requested` outbox row (brief step 3c) is added in Phase 7 together with the outbox table.

@@ -9,6 +9,7 @@ import { adminRoutes } from './modules/admin/routes.js';
 import { registerAuth } from './modules/auth/guard.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { TokenService } from './modules/auth/tokens.js';
+import { bookingRoutes } from './modules/bookings/routes.js';
 import { eventRoutes } from './modules/events/routes.js';
 import { holdRoutes } from './modules/holds/routes.js';
 import { healthRoutes } from './routes/health.js';
@@ -47,6 +48,7 @@ export async function buildApp({ logger, config, db, redis, healthChecks }: AppD
   authRoutes(app, { db, tokens });
   eventRoutes(app, { db, redis });
   holdRoutes(app, { db, redis, config, authenticate });
+  bookingRoutes(app, { db, redis, config, authenticate });
   adminRoutes(app, { db, requireAdmin });
 
   return app;

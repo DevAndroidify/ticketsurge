@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
 import type pg from 'pg';
 import { notFound } from '../../errors.js';
+import { activeSeatClaims, type BookingStatus } from '../bookings/repository.js';
 import { listEvents, findEvent, listSeats } from './repository.js';
 import { eventIdParams, listEventsQuery } from './schemas.js';
 
@@ -28,15 +29,16 @@ export function eventRoutes(app: FastifyInstance, { db, redis }: EventRoutesOpti
   });
 
   /**
-   * Seat map with live status from Redis. If Redis is down the map is still served with
-   * `degraded: true`, so clients can show the layout but must not trust "available".
+   * Seat map. Active bookings in PostgreSQL are the truth (CONFIRMED = sold, PENDING_PAYMENT = held);
+   * Redis adds live holds that have no booking yet. If Redis is down the map is served with
+   * `degraded: true`: booked seats are still correct, but unbooked holds are not visible.
    */
   app.get('/events/:id/seats', async (request) => {
     const { id } = eventIdParams.parse(request.params);
     const event = await findEvent(db, id);
     if (!event) throw notFound('Event not found');
 
-    const seats = await listSeats(db, id);
+    const [seats, claims] = await Promise.all([listSeats(db, id), activeSeatClaims(db, id)]);
     let states = new Map<string, SeatState>();
     let degraded = false;
     if (redis.status === 'ready') {
@@ -54,7 +56,10 @@ export function eventRoutes(app: FastifyInstance, { db, redis }: EventRoutesOpti
       degraded = true;
     }
 
-    const withStatus = seats.map((seat) => ({ ...seat, status: toStatus(states.get(seat.id)) }));
+    const withStatus = seats.map((seat) => ({
+      ...seat,
+      status: toStatus(claims.get(seat.id), states.get(seat.id)),
+    }));
     return {
       eventId: id,
       total: seats.length,
@@ -65,7 +70,9 @@ export function eventRoutes(app: FastifyInstance, { db, redis }: EventRoutesOpti
   });
 }
 
-function toStatus(state: SeatState | undefined): SeatStatus {
+function toStatus(claim: BookingStatus | undefined, state: SeatState | undefined): SeatStatus {
+  if (claim === 'CONFIRMED') return 'sold';
+  if (claim === 'PENDING_PAYMENT') return 'held';
   if (!state) return 'available';
   return state.kind === 'sold' ? 'sold' : 'held';
 }

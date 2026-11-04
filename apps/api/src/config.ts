@@ -40,6 +40,10 @@ export const apiConfigSchema = z.object({
   REDIS_COMMAND_TIMEOUT_MS: durationMsSchema.default(1000),
   HOLD_TTL_MS: durationMsSchema.default(600_000),
   MAX_SEATS_PER_HOLD: z.coerce.number().int().min(1).max(50).default(8),
+  // A booking must be paid within this window after creation.
+  PAYMENT_DEADLINE_MS: durationMsSchema.default(300_000),
+  // POST /bookings resets the hold to expire this long after the payment deadline.
+  HOLD_AFTER_DEADLINE_MS: durationMsSchema.default(60_000),
   // TEMPORARY (Phase 4 only): skip the admission check in holdSeats until the queue exists.
   ADMISSION_BYPASS: z.stringbool().default(false),
 });
