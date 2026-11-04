@@ -14,7 +14,7 @@
 | 10    | Seat sync and live updates    | Done        |
 | 11    | Tickets and notifications     | Done        |
 | 12    | Retries and dead letters      | Done        |
-| 13    | Analytics and replay          | Not started |
+| 13    | Analytics and replay          | Done        |
 | 14    | Monitoring                    | Not started |
 | 15    | Load and failure tests        | Not started |
 
@@ -278,3 +278,30 @@ Notes:
   exhausted retry budget and a permanent error are dead-lettered (3 and 1 attempts) and later messages
   continue; at the service level, garbage on `booking.requested` lands in `dlq.payment-service` and a
   real booking behind it still confirms.
+
+Fixed during this phase:
+
+- An intermittent test failure: a consumer that subscribes before a brand-new topic appears in broker
+  metadata skips that topic until its next metadata refresh (minutes). Test topic creation now waits
+  until every partition has a leader. In production, topics exist before services start.
+
+## Phase 13: Analytics and replay (done 2026-11-04)
+
+- `migrations/0008_analytics.sql`: `analytics.sales_by_event` (confirmed bookings, seats sold, revenue,
+  cancelled, expired per event) and `analytics.processed_events`.
+- `apps/analytics-service`: consumes `booking.confirmed` and `booking.cancelled` (group `analytics`) and
+  increments the totals, exactly once per message via `processed_events`.
+- `npm run kafka:reset-offsets -- <group>`: resets a stopped consumer group to the earliest retained
+  offsets. The admin API has no "set offsets" call, so it deletes the group's committed offsets; our
+  consumers start a group without offsets at the earliest offset. It refuses while the group has members.
+- `npm run analytics:rebuild`: resets the analytics group first (so it fails safely if the service is
+  still running), then empties both analytics tables. Starting the service replays the topics.
+- Test: sales totals for 6 bookings (4 confirmed, 2 cancelled) match the booking tables; after stopping
+  analytics, resetting offsets, and clearing the tables, the replay produces identical totals. A reset
+  while the service runs is refused. Also verified live on the dev data: 19 messages replayed into the
+  same totals.
+
+Notes:
+
+- A rebuild only sees messages Kafka still retains (7 days by default). For longer history, raise
+  `KAFKA_RETENTION_MS` or snapshot the totals.

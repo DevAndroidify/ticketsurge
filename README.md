@@ -37,6 +37,7 @@ npm run dev:payment         # simulated payments and refunds
 npm run dev:tickets         # issues tickets for confirmed bookings
 npm run dev:notifications   # simulated email notifications
 npm run dev:realtime        # WebSocket gateway on :3001
+npm run dev:analytics       # sales totals per event (rebuild: stop it, npm run analytics:rebuild, start)
 curl localhost:3000/health
 ```
 

@@ -14,6 +14,7 @@
     { "path": "apps/payment-service/tsconfig.build.json" },
     { "path": "apps/realtime-gateway/tsconfig.build.json" },
     { "path": "apps/ticket-service/tsconfig.build.json" },
-    { "path": "apps/notification-service/tsconfig.build.json" }
+    { "path": "apps/notification-service/tsconfig.build.json" },
+    { "path": "apps/analytics-service/tsconfig.build.json" }
   ]
 }

@@ -3,6 +3,7 @@ export {
   createProducer,
   deleteTopicsWithPrefix,
   ensureTopics,
+  resetGroupToEarliest,
   type Admin,
   type KafkaClient,
   type KafkaSettings,

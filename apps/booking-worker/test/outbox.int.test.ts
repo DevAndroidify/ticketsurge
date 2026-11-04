@@ -139,17 +139,42 @@ describe('booking outbox', () => {
     expect(await relay().publishBatch()).toBe(1);
   });
 
-  it('publishes each row once when two relays race, in batches of the configured size', async () => {
+  it('publishes nothing while another relay holds the lock, then each row once in batches', async () => {
+    const ids = new Set<string>();
     for (let i = 0; i < 5; i++) {
-      await bookSeats(t, await registerUser(t), DEMO_EVENT_ID, [seatIds[i] ?? '']);
+      ids.add(
+        (await bookSeats(t, await registerUser(t), DEMO_EVENT_ID, [seatIds[i] ?? ''])).bookingId,
+      );
     }
+    // Simulate another relay mid-batch: hold the same transaction-level advisory lock.
+    const other = await t.clients.pg.connect();
+    try {
+      await other.query('BEGIN');
+      await other.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['booking.outbox']);
+      expect(await relay({ batchSize: 3 }).publishBatch()).toBe(0);
+      expect(await outboxBacklog(t.clients.pg, 'booking.outbox')).toBe(5);
+    } finally {
+      await other.query('ROLLBACK');
+      other.release();
+    }
+
+    // Two relays racing for the lock: however they interleave, each row is published exactly once.
     const [a, b] = await Promise.all([
       relay({ batchSize: 3 }).publishBatch(),
       relay({ batchSize: 3 }).publishBatch(),
     ]);
-    // The advisory lock lets only one of them publish.
-    expect(a + b).toBe(3);
-    expect(await relay({ batchSize: 3 }).publishBatch()).toBe(2);
+    const rest = await relay({ batchSize: 3 }).publishBatch();
+    expect(a + b + rest).toBe(5);
+    expect(Math.max(a, b, rest)).toBeLessThanOrEqual(3);
     expect(await outboxBacklog(t.clients.pg, 'booking.outbox')).toBe(0);
+
+    const messages = await waitForMessages(
+      requestedTopic,
+      (m) => ids.has(m.envelope.data.bookingId),
+      {
+        count: 5,
+      },
+    );
+    expect(new Set(messages.map((m) => m.envelope.data.bookingId))).toEqual(ids);
   });
 });

@@ -8,7 +8,9 @@
     "typecheck": "tsc -p .",
     "migrate": "tsx --conditions=source src/cli/migrate.ts",
     "seed": "tsx --conditions=source src/cli/seed.ts",
-    "create-topics": "tsx --conditions=source src/cli/create-topics.ts"
+    "create-topics": "tsx --conditions=source src/cli/create-topics.ts",
+    "reset-offsets": "tsx --conditions=source src/cli/reset-offsets.ts",
+    "analytics-rebuild": "tsx --conditions=source src/cli/analytics-rebuild.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"

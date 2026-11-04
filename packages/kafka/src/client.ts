@@ -72,6 +72,40 @@ export async function ensureTopics(
   return missing;
 }
 
+/**
+ * Resets a consumer group to the earliest retained offset of every topic, so its next start
+ * re-reads everything still in Kafka (7 days by default).
+ *
+ * The admin API has no "set offsets" call, so this deletes the group's committed offsets: our
+ * consumers start a group that has no offsets at the earliest offset (fromBeginning). Kafka only
+ * allows this while the group has no running members, so stop the service first.
+ */
+export async function resetGroupToEarliest(
+  admin: Admin,
+  groupId: string,
+): Promise<'reset' | 'not_found'> {
+  const { groups } = await admin.describeGroups([groupId]);
+  const group = groups[0];
+  if (group && group.members.length > 0) {
+    throw new Error(
+      `consumer group ${groupId} has ${group.members.length} active member(s); stop the service first`,
+    );
+  }
+  try {
+    await admin.deleteGroups([groupId]);
+    return 'reset';
+  } catch (error) {
+    // GROUP_ID_NOT_FOUND: the group has no committed offsets, so it already starts from the earliest.
+    const groupErrors = (error as { groups?: { errorCode?: number }[] }).groups;
+    if (groupErrors?.length && groupErrors.every((g) => g.errorCode === GROUP_ID_NOT_FOUND)) {
+      return 'not_found';
+    }
+    throw error;
+  }
+}
+
+const GROUP_ID_NOT_FOUND = 69;
+
 export async function deleteTopicsWithPrefix(admin: Admin, prefix: string): Promise<string[]> {
   if (!prefix) throw new Error('refusing to delete topics without a prefix');
   const topics = (await admin.listTopics()).filter((name) => name.startsWith(prefix));
