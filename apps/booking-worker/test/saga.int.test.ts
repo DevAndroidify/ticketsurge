@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { TOPICS, createEnvelope } from '@ticketsurge/events';
+import { CONSUMER_GROUPS, TOPICS, createEnvelope, dlqTopicName } from '@ticketsurge/events';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEMO_EVENT_ID, seedDemoEvent } from '../../../scripts/src/lib/seed.js';
-import { waitForMessages } from '../../../scripts/src/testing/kafka.js';
+import { waitForMessages, waitForRawMessages } from '../../../scripts/src/testing/kafka.js';
 import {
   bookSeats,
   createTestApp,
@@ -164,6 +164,24 @@ describe('payment and booking saga', () => {
         "SELECT 1 FROM booking.outbox WHERE topic LIKE '%booking.cancelled'",
       ),
     ).toBe(0);
+  });
+
+  it('dead-letters a malformed booking.requested and keeps charging later bookings', async () => {
+    await pipeline.producer.send({
+      topic: pipeline.topic(TOPICS.bookingRequested),
+      messages: [{ key: 'garbage', value: '{"type":"booking.requested","data":"nope"}' }],
+    });
+    const user = await registerUser(t);
+    const { bookingId } = await bookSeats(t, user, DEMO_EVENT_ID, seatIds.slice(0, 1));
+    await waitForStatus(t.clients.pg, bookingId, 'CONFIRMED');
+
+    const [dead] = await waitForRawMessages(
+      dlqTopicName(pipeline.prefix, CONSUMER_GROUPS.paymentService),
+      (m) => m.key === 'garbage',
+    );
+    expect(dead?.headers).toMatchObject({
+      'dlq-original-topic': pipeline.topic(TOPICS.bookingRequested),
+    });
   });
 
   it('charges a booking once even if booking.requested is delivered twice', async () => {

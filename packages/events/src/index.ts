@@ -2,6 +2,7 @@ export {
   ALL_EVENT_TYPES,
   CONSUMER_GROUPS,
   TOPICS,
+  allTopicNames,
   dlqTopicName,
   topicName,
   type EventType,

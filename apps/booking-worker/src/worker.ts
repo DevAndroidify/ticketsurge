@@ -1,5 +1,5 @@
 import type { Logger } from '@ticketsurge/config';
-import { CONSUMER_GROUPS, TOPICS, topicName } from '@ticketsurge/events';
+import { CONSUMER_GROUPS, TOPICS, dlqTopicName, topicName } from '@ticketsurge/events';
 import {
   startConsumer,
   type KafkaClient,
@@ -66,6 +66,10 @@ export async function startBookingWorker(
     consumers.saga = await startConsumer({
       kafka,
       groupId: `${prefix}${CONSUMER_GROUPS.bookingSaga}`,
+      deadLetter: {
+        topic: dlqTopicName(prefix, CONSUMER_GROUPS.bookingSaga),
+        producer,
+      },
       topics: [topicName(prefix, TOPICS.paymentCompleted)],
       logger,
       concurrency: settings.consumerConcurrency,
@@ -77,6 +81,10 @@ export async function startBookingWorker(
     consumers['seat-sync'] = await startConsumer({
       kafka,
       groupId: `${prefix}${CONSUMER_GROUPS.seatSync}`,
+      deadLetter: {
+        topic: dlqTopicName(prefix, CONSUMER_GROUPS.seatSync),
+        producer,
+      },
       topics: [
         topicName(prefix, TOPICS.bookingConfirmed),
         topicName(prefix, TOPICS.bookingCancelled),

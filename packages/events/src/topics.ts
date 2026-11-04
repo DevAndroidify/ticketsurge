@@ -28,6 +28,14 @@ export function dlqTopicName(prefix: string, consumerGroup: string): string {
   return `${prefix}dlq.${consumerGroup}`;
 }
 
+/** Every topic to create: the event topics plus one dead-letter topic per consumer group. */
+export function allTopicNames(prefix: string): string[] {
+  return [
+    ...ALL_EVENT_TYPES.map((type) => topicName(prefix, type)),
+    ...Object.values(CONSUMER_GROUPS).map((group) => dlqTopicName(prefix, group)),
+  ];
+}
+
 /** Consumer group names, prefixed like topics. */
 export const CONSUMER_GROUPS = {
   paymentService: 'payment-service',

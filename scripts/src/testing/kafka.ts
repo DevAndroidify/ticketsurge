@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createLogger, loadEnvFile } from '@ticketsurge/config';
-import { ALL_EVENT_TYPES, parseEnvelope, topicName, type AnyEnvelope } from '@ticketsurge/events';
+import { allTopicNames, parseEnvelope, type AnyEnvelope } from '@ticketsurge/events';
 import {
   createKafka,
   deleteTopicsWithPrefix,
@@ -30,11 +30,26 @@ export async function createTestTopics(): Promise<{ prefix: string; cleanup(): P
   const admin = testKafka('test-admin').admin();
   await admin.connect();
   try {
-    await ensureTopics(
-      admin,
-      ALL_EVENT_TYPES.map((type) => topicName(prefix, type)),
-      { partitions: 6, replicationFactor: 1, retentionMs: 3_600_000 },
-    );
+    const names = allTopicNames(prefix);
+    await ensureTopics(admin, names, {
+      partitions: 6,
+      replicationFactor: 1,
+      retentionMs: 3_600_000,
+    });
+    // A consumer that subscribes before a brand-new topic shows up in broker metadata silently skips
+    // it until its next metadata refresh (minutes). Wait until every partition has a leader.
+    const deadline = Date.now() + 20_000;
+    for (;;) {
+      const metadata = await admin.fetchTopicMetadata({ topics: names }).catch(() => undefined);
+      const ready =
+        metadata?.length === names.length &&
+        metadata.every(
+          (t) => t.partitions.length === 6 && t.partitions.every((p) => p.leader >= 0),
+        );
+      if (ready) break;
+      if (Date.now() > deadline) throw new Error('test topics did not become ready');
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
   } finally {
     await admin.disconnect();
   }
@@ -78,15 +93,43 @@ export interface ReceivedMessage {
 export async function waitForMessages(
   topic: string,
   predicate: (message: ReceivedMessage) => boolean,
-  { count = 1, timeoutMs = 30_000 }: { count?: number; timeoutMs?: number } = {},
+  options: { count?: number; timeoutMs?: number } = {},
 ): Promise<ReceivedMessage[]> {
+  const raw = await waitForRawMessages(
+    topic,
+    (m) => {
+      try {
+        return predicate({ ...m, envelope: parseEnvelope(JSON.parse(m.value)) });
+      } catch {
+        return false;
+      }
+    },
+    options,
+  );
+  return raw.map((m) => ({ ...m, envelope: parseEnvelope(JSON.parse(m.value)) }));
+}
+
+export interface RawMessage {
+  topic: string;
+  partition: number;
+  key: string | null;
+  headers: Record<string, string>;
+  value: string;
+}
+
+/** Like waitForMessages, but does not parse the value (for dead-letter topics). */
+export async function waitForRawMessages(
+  topic: string,
+  predicate: (message: RawMessage) => boolean,
+  { count = 1, timeoutMs = 30_000 }: { count?: number; timeoutMs?: number } = {},
+): Promise<RawMessage[]> {
   const kafka = testKafka('test-reader');
   const consumer = kafka.consumer({
     kafkaJS: { groupId: `test-reader-${randomBytes(6).toString('hex')}`, fromBeginning: true },
   });
   await consumer.connect();
   await consumer.subscribe({ topics: [topic] });
-  const matched: ReceivedMessage[] = [];
+  const matched: RawMessage[] = [];
   try {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -98,12 +141,12 @@ export async function waitForMessages(
           for (const [name, value] of Object.entries(message.headers ?? {})) {
             if (value !== undefined) headers[name] = value.toString();
           }
-          const received: ReceivedMessage = {
+          const received: RawMessage = {
             topic: from,
             partition,
             key: message.key?.toString() ?? null,
             headers,
-            envelope: parseEnvelope(JSON.parse(message.value?.toString() ?? 'null')),
+            value: message.value?.toString() ?? '',
           };
           if (predicate(received)) matched.push(received);
           if (matched.length >= count) {

@@ -13,7 +13,7 @@
 | 9     | Expiry and refunds            | Done        |
 | 10    | Seat sync and live updates    | Done        |
 | 11    | Tickets and notifications     | Done        |
-| 12    | Retries and dead letters      | Not started |
+| 12    | Retries and dead letters      | Done        |
 | 13    | Analytics and replay          | Not started |
 | 14    | Monitoring                    | Not started |
 | 15    | Load and failure tests        | Not started |
@@ -262,3 +262,19 @@ Notes:
   message IDs, creates no second ticket, no second `ticket.issued`, and no second notification; a
   replayed `booking.cancelled` notifies once. Also verified live with all six processes (5 bookings at a
   30% failure rate: tickets and notifications match outcomes, every consumer group at lag 0).
+
+## Phase 12: Retries and dead letters (done 2026-11-04)
+
+- `packages/kafka` consumer: a failing handler is retried with exponential backoff up to
+  `maxAttempts` (default 5, 200 ms doubling to 5 s). Malformed messages (JSON or schema errors) and
+  `PermanentError`s skip retries. Anything that cannot be processed goes to `dlq.<consumer-group>` with
+  its original key, value, and headers, plus `dlq-error`, `dlq-original-topic`, `-partition`,
+  `-offset`, `dlq-consumer-group`, `dlq-attempts`, and `dlq-failed-at`. The consumer then commits and
+  moves on. If the dead-letter write fails, the offset is not committed and the message is retried.
+- Every service passes its producer as the dead-letter writer (notification-service gained a producer
+  for this alone). `npm run kafka:topics` also creates one `dlq.<group>` topic per consumer group.
+- Tests: a malformed message (bad JSON, and valid JSON failing the schema) reaches the dead-letter topic
+  with error headers while the next message is processed; transient failures succeed on retry; an
+  exhausted retry budget and a permanent error are dead-lettered (3 and 1 attempts) and later messages
+  continue; at the service level, garbage on `booking.requested` lands in `dlq.payment-service` and a
+  real booking behind it still confirms.

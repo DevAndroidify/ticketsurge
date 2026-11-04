@@ -10,10 +10,15 @@ export {
   type TopicSettings,
 } from './client.js';
 export {
+  DEFAULT_RETRY,
+  PermanentError,
+  isPermanent,
   startConsumer,
   type ConsumerOptions,
   type EnvelopeHandler,
   type MessageMeta,
+  type MessageOutcome,
+  type RetryPolicy,
   type RunningConsumer,
 } from './consumer.js';
 export { kafkaLogger } from './logger.js';

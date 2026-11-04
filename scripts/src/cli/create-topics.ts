@@ -7,7 +7,7 @@ import {
   loadConfig,
   loadEnvFile,
 } from '@ticketsurge/config';
-import { ALL_EVENT_TYPES, topicName } from '@ticketsurge/events';
+import { allTopicNames } from '@ticketsurge/events';
 import { createKafka, ensureTopics } from '@ticketsurge/kafka';
 import { z } from 'zod';
 
@@ -28,7 +28,7 @@ const kafka = createKafka({ brokers: config.KAFKA_BROKERS, clientId: 'create-top
 const admin = kafka.admin();
 await admin.connect();
 try {
-  const names = ALL_EVENT_TYPES.map((type) => topicName(config.KAFKA_TOPIC_PREFIX, type));
+  const names = allTopicNames(config.KAFKA_TOPIC_PREFIX);
   const created = await ensureTopics(admin, names, {
     partitions: config.KAFKA_PARTITIONS,
     replicationFactor: config.KAFKA_REPLICATION_FACTOR,

@@ -20,6 +20,7 @@
   "dependencies": {
     "@confluentinc/kafka-javascript": "^1.11.0",
     "@ticketsurge/config": "^0.1.0",
-    "@ticketsurge/events": "^0.1.0"
+    "@ticketsurge/events": "^0.1.0",
+    "zod": "^4.6.7"
   }
 }

@@ -1,5 +1,5 @@
 import type { Logger } from '@ticketsurge/config';
-import { CONSUMER_GROUPS, TOPICS, topicName } from '@ticketsurge/events';
+import { CONSUMER_GROUPS, TOPICS, dlqTopicName, topicName } from '@ticketsurge/events';
 import {
   startConsumer,
   type KafkaClient,
@@ -50,6 +50,10 @@ export async function startTicketService(
   const consumer = await startConsumer({
     kafka,
     groupId: `${prefix}${CONSUMER_GROUPS.ticketService}`,
+    deadLetter: {
+      topic: dlqTopicName(prefix, CONSUMER_GROUPS.ticketService),
+      producer,
+    },
     topics: [topicName(prefix, TOPICS.bookingConfirmed)],
     logger,
     concurrency: settings.concurrency,

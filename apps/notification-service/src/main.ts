@@ -9,7 +9,7 @@ import {
   nodeEnvSchema,
   postgresUrlSchema,
 } from '@ticketsurge/config';
-import { createKafka } from '@ticketsurge/kafka';
+import { createKafka, createProducer } from '@ticketsurge/kafka';
 import pg from 'pg';
 import { z } from 'zod';
 import { startNotificationService } from './service.js';
@@ -52,8 +52,9 @@ const kafka = createKafka({
   logger,
 });
 
+const producer = await createProducer(kafka);
 const consumer = await startNotificationService(
-  { db, kafka, logger },
+  { db, kafka, producer, logger },
   { topicPrefix: config.KAFKA_TOPIC_PREFIX, concurrency: config.CONSUMER_CONCURRENCY },
 );
 logger.info('notification service started');
@@ -66,6 +67,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     logger.info({ signal }, 'shutting down');
     void (async () => {
       await consumer.stop().catch(() => undefined);
+      await producer.disconnect().catch(() => undefined);
       await db.end().catch(() => undefined);
       process.exit(0);
     })();
