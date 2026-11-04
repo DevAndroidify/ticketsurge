@@ -1,4 +1,5 @@
 import { createLogger } from '@ticketsurge/config';
+import type { Redis } from 'ioredis';
 import type pg from 'pg';
 import { describe, expect, it } from 'vitest';
 import { unitTestConfig } from '../../test/support/config.js';
@@ -13,8 +14,9 @@ async function getHealth(checks: Record<string, HealthCheck>) {
   const app = await buildApp({
     logger,
     config: unitTestConfig({ HEALTH_CHECK_TIMEOUT_MS: 100 }),
-    // Health checks are faked, so the routes never touch the database.
+    // Health checks are faked, so the routes never touch the database or Redis.
     db: {} as pg.Pool,
+    redis: {} as Redis,
     healthChecks: checks,
   });
   try {

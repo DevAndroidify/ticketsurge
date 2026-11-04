@@ -5,7 +5,7 @@
 | 1     | Project setup                 | Done        |
 | 2     | Events and seats              | Done        |
 | 3     | Auth                          | Done        |
-| 4     | Seat holds                    | Not started |
+| 4     | Seat holds                    | Done        |
 | 5     | Bookings and final protection | Not started |
 | 6     | Virtual queue and rate limits | Not started |
 | 7     | Kafka and outbox              | Not started |
@@ -69,3 +69,25 @@ Decisions:
 
 - The brief's `booking.users` has no role column, so admin access uses an `ADMIN_EMAILS` allowlist. This
   replaces the Phase 2 `x-admin-key` header.
+
+## Phase 4: Seat holds (done 2026-11-04)
+
+- `packages/redis-scripts`: Lua scripts `holdSeats` (all-or-nothing, returns conflicts), `extendHold`
+  (only if the user still owns every seat), `releaseHold` (deletes a seat only while it is still
+  `hold:<holdId>`), loaded via EVALSHA with EVAL fallback, plus typed wrappers.
+- `POST /events/:id/holds` (201 holdId + expiresAt; 400 unknown/duplicate seats; 403 sale not open or
+  not admitted; 404 unknown event; 409 conflicts with the taken seat IDs; 503 Redis unavailable).
+- `DELETE /holds/:holdId` (204; 404 for someone else's or an expired hold; 503 Redis unavailable).
+- Seat map shows live `available` / `held` / `sold` from Redis; if Redis is down it is served with `degraded: true`.
+- Temporary `ADMISSION_BYPASS` flag (removed in Phase 6).
+- Test: 100 parallel HTTP requests for one seat give exactly one 201 and 99 x 409, and the seat is free
+  after its TTL. Also 300 concurrent overlapping multi-seat holds never double-hold a seat.
+
+Decisions:
+
+- Added the Redis key `holdref:<holdId>` -> eventId. DELETE /holds/:holdId and POST /bookings only
+  receive a hold ID, but hold and seat keys are partitioned by `{eventId}`. It is written before the hold
+  and extended before it, so it always outlives the hold.
+- Holds are rejected with 403 `SALE_NOT_OPEN` before `sale_starts_at` or for non-published events.
+- The Redis client fails fast while disconnected (offline queue off, 1s command timeout), so holds
+  return 503 instead of waiting.

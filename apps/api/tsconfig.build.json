@@ -9,5 +9,8 @@
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../../packages/config/tsconfig.build.json" }]
+  "references": [
+    { "path": "../../packages/config/tsconfig.build.json" },
+    { "path": "../../packages/redis-scripts/tsconfig.build.json" }
+  ]
 }

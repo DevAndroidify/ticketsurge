@@ -35,6 +35,13 @@ export const apiConfigSchema = z.object({
         .filter((email) => email.length > 0),
     )
     .pipe(z.array(z.email())),
+
+  // Redis commands that take longer than this fail, and the request gets 503.
+  REDIS_COMMAND_TIMEOUT_MS: durationMsSchema.default(1000),
+  HOLD_TTL_MS: durationMsSchema.default(600_000),
+  MAX_SEATS_PER_HOLD: z.coerce.number().int().min(1).max(50).default(8),
+  // TEMPORARY (Phase 4 only): skip the admission check in holdSeats until the queue exists.
+  ADMISSION_BYPASS: z.stringbool().default(false),
 });
 
 export type ApiConfig = z.infer<typeof apiConfigSchema>;

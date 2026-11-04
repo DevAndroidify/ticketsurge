@@ -1,0 +1,21 @@
+{
+  "name": "@ticketsurge/redis-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Atomic Redis Lua scripts for seat holds and the virtual queue, with typed wrappers",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "files": [
+    "dist",
+    "lua"
+  ]
+}

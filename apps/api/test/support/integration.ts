@@ -1,8 +1,9 @@
 // Integration harness: real PostgreSQL/Redis/Kafka from docker compose, test DB + Redis DB 1.
 import { randomUUID } from 'node:crypto';
 import { createLogger, loadConfig } from '@ticketsurge/config';
+import type { Redis } from 'ioredis';
 import type pg from 'pg';
-import { useTestEnv } from '../../../../scripts/src/testing/test-env.js';
+import { TEST_REDIS_DB, useTestEnv } from '../../../../scripts/src/testing/test-env.js';
 import { buildApp, tokenServiceFrom } from '../../src/app.js';
 import { createClients, type Clients } from '../../src/clients.js';
 import { apiConfigSchema, type ApiConfig } from '../../src/config.js';
@@ -62,12 +63,16 @@ export async function createTestApp(overrides: Partial<ApiConfig> = {}): Promise
     logger,
     config,
     db: clients.pg,
+    redis: clients.redis,
     healthChecks: {
       postgres: postgresCheck(clients.pg),
       redis: redisCheck(clients.redis, config.HEALTH_CHECK_TIMEOUT_MS),
       kafka: kafkaCheck(clients.kafkaAdmin, config.HEALTH_CHECK_TIMEOUT_MS),
     },
   });
+  // Tests send requests immediately, so wait for Redis to connect, unless this test points it
+  // at an unreachable address on purpose.
+  if (overrides.REDIS_URL === undefined) await redisReady(clients.redis);
   return {
     app,
     config,
@@ -82,4 +87,20 @@ export async function createTestApp(overrides: Partial<ApiConfig> = {}): Promise
 /** Empties every booking table. Integration test files run one at a time, so this is safe. */
 export async function resetDatabase(db: pg.Pool): Promise<void> {
   await db.query('TRUNCATE booking.events, booking.users CASCADE');
+}
+
+/** Flushes the test Redis DB. Refuses to touch any other DB. */
+export async function resetRedis(redis: Redis): Promise<void> {
+  if (redis.options.db !== TEST_REDIS_DB) throw new Error('refusing to flush a non-test Redis DB');
+  await redis.flushdb();
+}
+
+/** Waits until the client is connected; integration tests run right after client creation. */
+export async function redisReady(redis: Redis): Promise<void> {
+  if (redis.status === 'ready') return;
+  await new Promise<void>((resolve) => {
+    redis.once('ready', () => {
+      resolve();
+    });
+  });
 }

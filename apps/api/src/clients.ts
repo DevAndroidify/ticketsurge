@@ -17,7 +17,12 @@ export interface Clients {
 
 type ClientConfig = Pick<
   ApiConfig,
-  'DATABASE_URL' | 'REDIS_URL' | 'KAFKA_BROKERS' | 'KAFKA_CLIENT_ID' | 'HEALTH_CHECK_TIMEOUT_MS'
+  | 'DATABASE_URL'
+  | 'REDIS_URL'
+  | 'KAFKA_BROKERS'
+  | 'KAFKA_CLIENT_ID'
+  | 'HEALTH_CHECK_TIMEOUT_MS'
+  | 'REDIS_COMMAND_TIMEOUT_MS'
 >;
 
 /**
@@ -39,6 +44,7 @@ export function createClients(config: ClientConfig, logger: Logger): Clients {
     enableOfflineQueue: false,
     maxRetriesPerRequest: 1,
     connectTimeout: config.HEALTH_CHECK_TIMEOUT_MS,
+    commandTimeout: config.REDIS_COMMAND_TIMEOUT_MS,
     retryStrategy: (attempt) => Math.min(attempt * 200, 2000),
   });
   redis.on('error', (error) => {

@@ -27,6 +27,7 @@ async function main(): Promise<void> {
     logger,
     config,
     db: clients.pg,
+    redis: clients.redis,
     healthChecks: {
       postgres: postgresCheck(clients.pg),
       redis: redisCheck(clients.redis, config.HEALTH_CHECK_TIMEOUT_MS),
