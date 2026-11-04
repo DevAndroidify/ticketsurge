@@ -1,22 +1,22 @@
 # Progress
 
-| Phase | Name                          | Status      |
-| ----- | ----------------------------- | ----------- |
-| 1     | Project setup                 | Done        |
-| 2     | Events and seats              | Done        |
-| 3     | Auth                          | Done        |
-| 4     | Seat holds                    | Done        |
-| 5     | Bookings and final protection | Done        |
-| 6     | Virtual queue and rate limits | Done        |
-| 7     | Kafka and outbox              | Done        |
-| 8     | Payment and saga              | Done        |
-| 9     | Expiry and refunds            | Done        |
-| 10    | Seat sync and live updates    | Done        |
-| 11    | Tickets and notifications     | Done        |
-| 12    | Retries and dead letters      | Done        |
-| 13    | Analytics and replay          | Done        |
-| 14    | Monitoring                    | Done        |
-| 15    | Load and failure tests        | Not started |
+| Phase | Name                          | Status |
+| ----- | ----------------------------- | ------ |
+| 1     | Project setup                 | Done   |
+| 2     | Events and seats              | Done   |
+| 3     | Auth                          | Done   |
+| 4     | Seat holds                    | Done   |
+| 5     | Bookings and final protection | Done   |
+| 6     | Virtual queue and rate limits | Done   |
+| 7     | Kafka and outbox              | Done   |
+| 8     | Payment and saga              | Done   |
+| 9     | Expiry and refunds            | Done   |
+| 10    | Seat sync and live updates    | Done   |
+| 11    | Tickets and notifications     | Done   |
+| 12    | Retries and dead letters      | Done   |
+| 13    | Analytics and replay          | Done   |
+| 14    | Monitoring                    | Done   |
+| 15    | Load and failure tests        | Done   |
 
 ## Phase 1: Project setup (done 2026-11-04)
 
@@ -340,3 +340,23 @@ Fixed during this phase:
 Notes:
 
 - kafka-exporter reports -1 lag for partitions without a committed offset; dashboards clamp it to 0.
+
+## Phase 15: Load and failure tests (done 2026-11-04)
+
+- `npm run redis:rebuild`: sold seats from CONFIRMED bookings (markSold), holds from PENDING_PAYMENT
+  bookings (TTL = deadline + grace). Redis now runs without persistence, so a restart really loses state.
+- `npm run consistency:check`: the four zero-counts from the brief plus Redis sold seats equal to
+  PostgreSQL. Each schema is queried separately and compared in code.
+- `load-tests/flash-sale.js` (k6 2.3.0) and `load-tests/run.sh baseline|failures`: prepares 10,000 users
+  and a 500-seat event, runs every service (booking-worker split by role), injects the drills, waits for
+  drain, runs the consistency check, and collects measurements from k6 and Prometheus.
+- Results are in the README. Both runs passed the consistency check.
+
+Findings:
+
+- Payment throughput is about 6 partitions / `PAYMENT_DELAY_MS`, because a simulated charge holds its
+  partition. At 500 ms (~12/s) many bookings in a 300-user burst expired before payment (then refunded);
+  the load runs use 100 ms.
+- The relay was stopped for 78 s instead of 60 s because the Redis restart drill ran inside that window.
+- Memory is the limit on this machine (3.7 GB WSL): Kafka UI and Grafana are stopped during runs, and
+  k6 runs 200 users at a time.

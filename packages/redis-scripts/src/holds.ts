@@ -108,6 +108,38 @@ export async function releaseHold(
   return Number(reply);
 }
 
+export interface RestoreHoldInput {
+  eventId: string;
+  holdId: string;
+  userId: string;
+  seatIds: readonly string[];
+  ttlMs: number;
+}
+
+/**
+ * Recreates a hold for a PENDING_PAYMENT booking after Redis lost its data (redis:rebuild).
+ * Overwrites whatever the seat keys hold now: PostgreSQL's active booking owns these seats, so a hold
+ * someone grabbed after the restart is wrong and would only fail at booking time anyway.
+ * MULTI makes each booking's keys appear together.
+ */
+export async function restoreHold(redis: Redis, input: RestoreHoldInput): Promise<void> {
+  const value = `hold:${input.holdId}`;
+  const tx = redis.multi();
+  for (const seatId of input.seatIds) {
+    tx.set(keys.seat(input.eventId, seatId), value, 'PX', input.ttlMs);
+  }
+  tx.hset(
+    keys.hold(input.eventId, input.holdId),
+    'owner',
+    input.userId,
+    'seats',
+    input.seatIds.join(','),
+  );
+  tx.pexpire(keys.hold(input.eventId, input.holdId), input.ttlMs);
+  tx.set(keys.holdRef(input.holdId), input.eventId, 'PX', input.ttlMs);
+  await tx.exec();
+}
+
 /** Records which event a hold belongs to. Call before holdSeats with the same (or longer) TTL. */
 export async function setHoldRef(redis: Redis, holdId: string, eventId: string, ttlMs: number) {
   await redis.set(keys.holdRef(holdId), eventId, 'PX', ttlMs);

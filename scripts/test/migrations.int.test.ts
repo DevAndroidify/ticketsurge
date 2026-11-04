@@ -57,7 +57,8 @@ describe('runMigrations', () => {
 
 describe('seedDemoEvent', () => {
   it('creates 500 seats and is idempotent', async () => {
-    await pool.query('DELETE FROM booking.events WHERE id = $1', [DEMO_EVENT_ID]);
+    // Other test files may leave bookings that reference the demo event.
+    await pool.query('TRUNCATE booking.events, booking.users, booking.outbox CASCADE');
     expect(await seedDemoEvent(pool)).toEqual({ eventId: DEMO_EVENT_ID, seats: 500 });
     expect(await seedDemoEvent(pool)).toEqual({ eventId: DEMO_EVENT_ID, seats: 500 });
   });

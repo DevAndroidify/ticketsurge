@@ -9,4 +9,8 @@ coverage/
 !.env.example
 
 *.log
+
+# Load-test inputs contain access tokens; raw results are large. Summaries go in the README.
+load-tests/data/
+load-tests/results/
 .DS_Store

@@ -10,7 +10,10 @@
     "seed": "tsx --conditions=source src/cli/seed.ts",
     "create-topics": "tsx --conditions=source src/cli/create-topics.ts",
     "reset-offsets": "tsx --conditions=source src/cli/reset-offsets.ts",
-    "analytics-rebuild": "tsx --conditions=source src/cli/analytics-rebuild.ts"
+    "analytics-rebuild": "tsx --conditions=source src/cli/analytics-rebuild.ts",
+    "redis-rebuild": "tsx --conditions=source src/cli/redis-rebuild.ts",
+    "consistency-check": "tsx --conditions=source src/cli/consistency-check.ts",
+    "loadtest-prepare": "tsx --conditions=source src/cli/loadtest-prepare.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"
@@ -19,6 +22,9 @@
     "@ticketsurge/config": "^0.1.0",
     "@ticketsurge/events": "^0.1.0",
     "@ticketsurge/kafka": "^0.1.0",
+    "@ticketsurge/redis-scripts": "^0.1.0",
+    "ioredis": "^6.0.0",
+    "jose": "^6.2.15",
     "pg": "^8.23.1",
     "zod": "^4.6.7"
   }

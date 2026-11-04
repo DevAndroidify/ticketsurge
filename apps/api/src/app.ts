@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from '@ticketsurge/config';
 import { createRegistry, httpMetrics } from '@ticketsurge/metrics';
-import Fastify, { type FastifyBaseLogger } from 'fastify';
+import Fastify, { LogController, type FastifyBaseLogger } from 'fastify';
 import type { Redis } from 'ioredis';
 import type pg from 'pg';
 import type { ApiConfig } from './config.js';
@@ -49,7 +49,7 @@ export async function buildApp({ logger, config, db, redis, healthChecks }: AppD
     // X-Request-Id, and copied into every event this request produces, so one booking can be
     // followed from the HTTP call through every service's logs.
     requestIdHeader: false,
-    requestIdLogLabel: 'traceId',
+    logController: new LogController({ requestIdLogLabel: 'traceId' }),
     genReqId: (request) => {
       const incoming = request.headers['x-request-id'];
       return typeof incoming === 'string' && TRACE_ID.test(incoming) ? incoming : randomUUID();

@@ -71,22 +71,50 @@ reconnect, reload the seat map (`GET /events/:id/seats`) and your booking (`GET 
 anything that happened while you were disconnected is not replayed. Holds that expire on their own
 send no message either; they show as available on the next reload.
 
-Kafka UI: http://localhost:8080
+Kafka UI: http://localhost:8080 · Grafana: http://localhost:3002 · Prometheus: http://localhost:9090
 
-| Command                    | What it does                                    |
-| -------------------------- | ----------------------------------------------- |
-| `npm run infra:up`         | Start the containers and wait for health checks |
-| `npm run infra:down`       | Stop the containers (data is kept)              |
-| `npm run infra:reset`      | Stop the containers and delete their volumes    |
-| `npm run build`            | Compile every workspace (`tsc -b`)              |
-| `npm run db:migrate`       | Apply pending SQL migrations                    |
-| `npm run db:seed`          | Create the 500-seat demo event (idempotent)     |
-| `npm run dev:api`          | API with watch mode                             |
-| `npm run dev:admission`    | Admission worker with watch mode                |
-| `npm run typecheck`        | Type-check sources and tests                    |
-| `npm run lint`             | ESLint (type-aware) and Prettier check          |
-| `npm test`                 | Unit tests                                      |
-| `npm run test:integration` | Tests against the running containers            |
+| Command                                           | What it does                                                |
+| ------------------------------------------------- | ----------------------------------------------------------- |
+| `npm run infra:up`                                | Start the containers and wait for health checks             |
+| `npm run infra:down`                              | Stop the containers (data is kept)                          |
+| `npm run infra:reset`                             | Stop the containers and delete their volumes                |
+| `npm run build`                                   | Compile every workspace (`tsc -b`)                          |
+| `npm run db:migrate`                              | Apply pending SQL migrations                                |
+| `npm run db:seed`                                 | Create the 500-seat demo event (idempotent)                 |
+| `npm run dev:api`                                 | API with watch mode                                         |
+| `npm run dev:admission`                           | Admission worker with watch mode                            |
+| `npm run typecheck`                               | Type-check sources and tests                                |
+| `npm run lint`                                    | ESLint (type-aware) and Prettier check                      |
+| `npm test`                                        | Unit tests                                                  |
+| `npm run test:integration`                        | Tests against the running containers                        |
+| `npm run loadtest:baseline` / `loadtest:failures` | 10,000-user flash sale (k6), optionally with failure drills |
+| `npm run redis:rebuild`                           | Restore sold seats and booked holds from PostgreSQL         |
+| `npm run consistency:check`                       | Verify the end-of-test invariants                           |
+
+## Load test results
+
+Measured on 2026-11-04 with `load-tests/run.sh`: 10,000 users (200 at a time) compete for 500 seats;
+10% of holds are abandoned and 10% of payments fail. Everything runs on one laptop: Intel Core
+i5-1235U (12 threads), WSL2 with 3.7 GB RAM, Docker 29.7.2, Node 24.
+
+| Measurement                   | Baseline | With failure drills |
+| ----------------------------- | -------- | ------------------- |
+| Peak requests per second      | 593      | 329                 |
+| p95 hold latency              | 1.8 s    | 4.9 s               |
+| p95 booking latency           | 2.8 s    | 5.0 s               |
+| Max consumer lag (all groups) | 52       | 563                 |
+| Recovery time                 | 0 s      | 170 s               |
+| Seats sold                    | 497      | 493                 |
+| Consistency check             | all 0    | all 0               |
+
+Failure drills, during the load: kill -9 one of two booking-saga instances; stop the outbox relay
+(78 s); restart Redis (back after 7.7 s) and run `redis:rebuild` (0.6 s); stop ticket-service for 30 s.
+Recovery time is from the last fault ending until consumer lag and outbox backlog stayed at 0; the load
+was still running for most of it. With the relay stopped, many bookings missed their 30 s payment
+deadline: they expired and their late payments were refunded, as designed. The consistency check
+(no seat with two active bookings, no confirmed booking without a successful payment, no sold seat
+without a ticket, no overdue pending booking, Redis sold seats equal to PostgreSQL) passed after both
+runs.
 
 ## Local vs production-style Kafka settings
 

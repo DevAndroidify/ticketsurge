@@ -9,12 +9,14 @@ export {
   getSeatStates,
   holdSeats,
   releaseHold,
+  restoreHold,
   setHoldRef,
   type ExtendHoldInput,
   type HoldInfo,
   type HoldSeatsInput,
   type HoldSeatsResult,
   type ReleaseHoldInput,
+  type RestoreHoldInput,
 } from './holds.js';
 export {
   admitNext,
