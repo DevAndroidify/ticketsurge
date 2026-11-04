@@ -28,7 +28,7 @@ export interface RunningPaymentService {
   stop(): Promise<void>;
 }
 
-/** Starts the booking.requested consumer and the payment outbox relay. */
+/** Starts the consumer (booking.requested, payment.refund-requested) and the payment outbox relay. */
 export async function startPaymentService(
   deps: PaymentServiceDeps,
   settings: PaymentServiceSettings,
@@ -50,7 +50,7 @@ export async function startPaymentService(
   const consumer = await startConsumer({
     kafka,
     groupId: `${prefix}${CONSUMER_GROUPS.paymentService}`,
-    topics: [topicName(prefix, TOPICS.bookingRequested)],
+    topics: [topicName(prefix, TOPICS.bookingRequested), topicName(prefix, TOPICS.refundRequested)],
     logger,
     concurrency: settings.concurrency,
     handle: createPaymentHandler(db, settings, logger),

@@ -9,8 +9,9 @@ import {
 import { OutboxRelay } from '@ticketsurge/outbox';
 import type pg from 'pg';
 import { createSagaHandler } from './saga.js';
+import { ExpirySweeper, type SweeperSettings } from './sweeper.js';
 
-export const ROLES = ['relay', 'saga'] as const;
+export const ROLES = ['relay', 'saga', 'sweeper'] as const;
 export type Role = (typeof ROLES)[number];
 
 export interface BookingWorkerDeps {
@@ -27,6 +28,7 @@ export interface BookingWorkerSettings {
   outboxBatchSize: number;
   outboxPollIntervalMs: number;
   consumerConcurrency: number;
+  sweeper: Omit<SweeperSettings, 'topicPrefix'>;
 }
 
 export interface RunningBookingWorker {
@@ -65,6 +67,11 @@ export async function startBookingWorker(
       concurrency: settings.consumerConcurrency,
       handle: createSagaHandler(db, prefix, logger),
     });
+  }
+
+  if (settings.roles.includes('sweeper')) {
+    const sweeper = new ExpirySweeper(db, { ...settings.sweeper, topicPrefix: prefix }, logger);
+    loops.push(sweeper.run(controller.signal));
   }
 
   logger.info({ roles: settings.roles }, 'booking worker started');

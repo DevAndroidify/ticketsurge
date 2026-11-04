@@ -10,7 +10,7 @@
 | 6     | Virtual queue and rate limits | Done        |
 | 7     | Kafka and outbox              | Done        |
 | 8     | Payment and saga              | Done        |
-| 9     | Expiry and refunds            | Not started |
+| 9     | Expiry and refunds            | Done        |
 | 10    | Seat sync and live updates    | Not started |
 | 11    | Tickets and notifications     | Not started |
 | 12    | Retries and dead letters      | Not started |
@@ -191,3 +191,28 @@ Fixed during this phase:
 - Several workspaces had lost declared dependencies during sequential `npm install -w` calls (hidden
   by hoisting). Every package.json now declares exactly what it imports.
 - Each service now uses its own Kafka client ID (removed the shared `KAFKA_CLIENT_ID` from `.env`).
+
+## Phase 9: Expiry and refunds (done 2026-11-04)
+
+- `migrations/0006_expiry_and_refunds.sql`: partial index on overdue-candidate bookings; payments can
+  be `REFUNDED` with `refunded_at`.
+- Expiry sweeper (booking-worker role `sweeper`): every `SWEEP_INTERVAL_MS`, locks overdue
+  PENDING_PAYMENT bookings with `FOR UPDATE SKIP LOCKED`, sets EXPIRED, deactivates seats, and adds
+  `booking.cancelled` (reason EXPIRED) in one transaction. It pauses while the booking outbox has more
+  than `SWEEPER_MAX_OUTBOX_BACKLOG` unpublished rows (a lagging relay means the payment may not have
+  had a chance to arrive).
+- Late payments: a successful `payment.completed` that cannot confirm locks the booking. If it is still
+  pending but overdue, the saga expires it exactly like the sweeper. For EXPIRED or CANCELLED bookings it
+  publishes `payment.refund-requested`. Seats are never restored.
+- payment-service consumes `payment.refund-requested` and marks the payment REFUNDED (conditional on
+  SUCCEEDED, so a repeat cannot refund twice).
+- Saga and sweeper share one `closePendingBooking` helper with the conditional update.
+- Tests: a delayed payment (3s against a 1s deadline) expires the booking, frees its seats, publishes
+  `booking.cancelled`, then requests and records a refund; a late payment before the sweeper runs is
+  expired and refunded by the saga; the sweeper pauses above the backlog limit and resumes after it; ten
+  failed payments racing two sweeps close each booking exactly once.
+
+Notes:
+
+- Topics must exist (`npm run kafka:topics`) before services start: auto-creation is disabled, and a
+  send to a missing topic blocks the relay until librdkafka's delivery timeout.

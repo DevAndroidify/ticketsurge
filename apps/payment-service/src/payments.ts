@@ -68,7 +68,29 @@ export function createPaymentHandler(db: pg.Pool, settings: PaymentSettings, log
     if (!applied) logger.debug({ messageId: envelope.messageId }, 'duplicate message ignored');
   }
 
+  /** Records the refund of a payment that succeeded after its booking expired. */
+  async function refund(envelope: Extract<AnyEnvelope, { type: 'payment.refund-requested' }>) {
+    const { paymentId, bookingId, reason } = envelope.data;
+    await processOnce(
+      db,
+      'payment.processed_events',
+      CONSUMER_NAME,
+      envelope.messageId,
+      async (client) => {
+        // Conditional on SUCCEEDED, so a repeated request cannot refund twice.
+        const { rowCount } = await client.query(
+          `UPDATE payment.payments SET status = 'REFUNDED', refunded_at = now(), updated_at = now()
+         WHERE id = $1 AND status = 'SUCCEEDED'`,
+          [paymentId],
+        );
+        if (rowCount) logger.info({ bookingId, paymentId, reason }, 'payment refunded');
+        else logger.info({ bookingId, paymentId }, 'refund ignored: payment not refundable');
+      },
+    );
+  }
+
   return async (envelope: AnyEnvelope): Promise<void> => {
     if (envelope.type === 'booking.requested') await charge(envelope);
+    else if (envelope.type === 'payment.refund-requested') await refund(envelope);
   };
 }

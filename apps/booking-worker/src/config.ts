@@ -19,6 +19,10 @@ export const bookingWorkerConfigSchema = z.object({
   OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(5000).default(100),
   OUTBOX_POLL_INTERVAL_MS: durationMsSchema.default(200),
   CONSUMER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(6),
+  SWEEP_INTERVAL_MS: durationMsSchema.default(1000),
+  SWEEP_BATCH_SIZE: z.coerce.number().int().min(1).max(5000).default(100),
+  // The sweeper pauses while more booking outbox rows than this are unpublished.
+  SWEEPER_MAX_OUTBOX_BACKLOG: z.coerce.number().int().min(0).default(1000),
   // Comma-separated parts to run in this process (default: all of them).
   BOOKING_WORKER_ROLES: z
     .string()

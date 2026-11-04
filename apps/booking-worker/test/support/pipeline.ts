@@ -44,6 +44,11 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     max: 20,
     types: standaloneTypes(),
   });
+  // Outbox rows left by an earlier test file point at topics that file already deleted; a relay
+  // would block on them. Every pipeline starts with empty outboxes and dedup tables.
+  await db.query(
+    'TRUNCATE booking.outbox, booking.processed_events, payment.outbox, payment.processed_events',
+  );
   const kafka = testKafka('pipeline-test');
   const producer = await createProducer(kafka);
   const deps = { db, kafka, producer, logger: testLogger };
@@ -54,6 +59,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     outboxBatchSize: 100,
     outboxPollIntervalMs: 50,
     consumerConcurrency: 6,
+    sweeper: { intervalMs: 200, batchSize: 100, maxOutboxBacklog: 1000 },
   });
   const payment =
     options.payment === false

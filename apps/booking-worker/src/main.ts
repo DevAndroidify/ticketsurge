@@ -42,6 +42,11 @@ const worker = await startBookingWorker(
     outboxBatchSize: config.OUTBOX_BATCH_SIZE,
     outboxPollIntervalMs: config.OUTBOX_POLL_INTERVAL_MS,
     consumerConcurrency: config.CONSUMER_CONCURRENCY,
+    sweeper: {
+      intervalMs: config.SWEEP_INTERVAL_MS,
+      batchSize: config.SWEEP_BATCH_SIZE,
+      maxOutboxBacklog: config.SWEEPER_MAX_OUTBOX_BACKLOG,
+    },
   },
 );
 
