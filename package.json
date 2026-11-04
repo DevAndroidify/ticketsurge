@@ -1,0 +1,44 @@
+{
+  "name": "ticketsurge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Flash-sale ticketing backend demonstrating Kafka and Redis under contention",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
+    "typecheck": "tsc -p packages/config && tsc -p apps/api",
+    "lint": "eslint . && prettier --check .",
+    "lint:fix": "eslint . --fix && prettier --write .",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:all": "vitest run",
+    "dev:api": "npm run dev -w @ticketsurge/api",
+    "start:api": "npm run start -w @ticketsurge/api",
+    "infra:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d --wait",
+    "infra:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
+    "infra:reset": "docker compose --env-file .env -f infra/docker-compose.yml down -v",
+    "infra:ps": "docker compose --env-file .env -f infra/docker-compose.yml ps",
+    "infra:logs": "docker compose --env-file .env -f infra/docker-compose.yml logs -f"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.14.0",
+    "pino-pretty": "^13.2.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  }
+}
