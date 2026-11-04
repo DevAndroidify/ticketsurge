@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { keys } from '@ticketsurge/redis-scripts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runAdmissionTick } from '../../admission-worker/src/admission.js';
 import { DEMO_EVENT_ID, seedDemoEvent } from '../../../scripts/src/lib/seed.js';
@@ -15,14 +16,17 @@ import {
 let t: TestApp;
 let seatIds: string[];
 
-const tick = (batchSize: number) =>
-  runAdmissionTick(t.clients.redis, {
+/** One admission round, as if the previous round's interval had already passed. */
+async function tick(batchSize: number) {
+  // The per-event lock would (correctly) block back-to-back rounds; clear it to simulate time passing.
+  await t.clients.redis.del(keys.admissionTick(DEMO_EVENT_ID));
+  return runAdmissionTick(t.clients.redis, {
     batchSize,
     admissionTtlMs: 300_000,
-    // Tiny interval so consecutive ticks in a test are not blocked by the per-event lock.
-    intervalMs: 1,
+    intervalMs: 1000,
     instanceId: 'test-worker',
   });
+}
 
 beforeAll(async () => {
   t = await createTestApp();
