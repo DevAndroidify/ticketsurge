@@ -12,6 +12,8 @@
     { "path": "apps/admission-worker/tsconfig.build.json" },
     { "path": "apps/booking-worker/tsconfig.build.json" },
     { "path": "apps/payment-service/tsconfig.build.json" },
-    { "path": "apps/realtime-gateway/tsconfig.build.json" }
+    { "path": "apps/realtime-gateway/tsconfig.build.json" },
+    { "path": "apps/ticket-service/tsconfig.build.json" },
+    { "path": "apps/notification-service/tsconfig.build.json" }
   ]
 }

@@ -28,8 +28,15 @@ npm run infra:up            # PostgreSQL, Redis, Kafka, Kafka UI; waits until al
 npm run build
 npm run db:migrate          # apply SQL migrations
 npm run db:seed             # demo event with 500 seats
+npm run kafka:topics        # create the Kafka topics (6 partitions each)
 npm run dev:api             # http://localhost:3000
-npm run dev:admission       # in a second terminal: lets users out of the queue
+# each of these in its own terminal:
+npm run dev:admission       # lets users out of the virtual queue
+npm run dev:booking-worker  # outbox relay, booking saga, expiry sweeper, seat sync
+npm run dev:payment         # simulated payments and refunds
+npm run dev:tickets         # issues tickets for confirmed bookings
+npm run dev:notifications   # simulated email notifications
+npm run dev:realtime        # WebSocket gateway on :3001
 curl localhost:3000/health
 ```
 

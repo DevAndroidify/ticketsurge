@@ -12,7 +12,7 @@
 | 8     | Payment and saga              | Done        |
 | 9     | Expiry and refunds            | Done        |
 | 10    | Seat sync and live updates    | Done        |
-| 11    | Tickets and notifications     | Not started |
+| 11    | Tickets and notifications     | Done        |
 | 12    | Retries and dead letters      | Not started |
 | 13    | Analytics and replay          | Not started |
 | 14    | Monitoring                    | Not started |
@@ -244,3 +244,21 @@ Notes:
 - Holds that simply expire (TTL) send no message; clients see them as available on the next reload.
 - Waiting users get `queue.updated` only when admitted; their position comes from polling
   `GET /events/:id/queue/me` (pushing positions to everyone each round would be expensive).
+
+## Phase 11: Tickets and notifications (done 2026-11-04)
+
+- `migrations/0007_tickets_and_notifications.sql`: `ticket` schema (`tickets` with unique code and unique
+  `(event_id, seat_id)`, `outbox`, `processed_events`) and `notification` schema (`notifications` with
+  unique `(booking_id, type)`, `processed_events`; no outbox because it publishes nothing).
+- `apps/ticket-service`: consumes `booking.confirmed`, issues one ticket per seat with a random
+  readable code (`TS-XXXX-XXXX-XXXX`), and publishes `ticket.issued` through its own outbox, only when
+  it actually created tickets.
+- `apps/notification-service`: consumes `ticket.issued` (TICKETS_ISSUED, so the message goes out after
+  tickets exist) and `booking.cancelled` (BOOKING_CANCELLED / BOOKING_EXPIRED), records the notification,
+  then "sends" it (a log line; real email/SMS is out of scope).
+- Two layers of idempotency in both: `processed_events` for redelivered messages (same messageId), and
+  unique constraints for replays that arrive with a new messageId.
+- Test: replaying `booking.confirmed` and `ticket.issued`, both as exact redeliveries and with new
+  message IDs, creates no second ticket, no second `ticket.issued`, and no second notification; a
+  replayed `booking.cancelled` notifies once. Also verified live with all six processes (5 bookings at a
+  30% failure rate: tickets and notifications match outcomes, every consumer group at lag 0).

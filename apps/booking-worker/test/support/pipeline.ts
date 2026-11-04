@@ -7,6 +7,9 @@ import {
   startPaymentService,
   type RunningPaymentService,
 } from '../../../payment-service/src/service.js';
+import { startNotificationService } from '../../../notification-service/src/service.js';
+import type { Sender } from '../../../notification-service/src/notifications.js';
+import { startTicketService } from '../../../ticket-service/src/service.js';
 import { createTestTopics, testKafka, testLogger } from '../../../../scripts/src/testing/kafka.js';
 import { useTestEnv } from '../../../../scripts/src/testing/test-env.js';
 import { startBookingWorker, type RunningBookingWorker, type Role } from '../../src/worker.js';
@@ -14,6 +17,8 @@ import { startBookingWorker, type RunningBookingWorker, type Role } from '../../
 export interface PipelineOptions {
   roles?: readonly Role[];
   payment?: { delayMs?: number; failureRate?: number; random?: () => number } | false;
+  /** Also run ticket-service and notification-service. */
+  downstream?: boolean;
 }
 
 export interface Pipeline {
@@ -22,6 +27,8 @@ export interface Pipeline {
   producer: Producer;
   worker: RunningBookingWorker;
   payment: RunningPaymentService | undefined;
+  /** Notifications the simulated sender delivered (when `downstream` is on). */
+  sent: Parameters<Sender>[0][];
   topic(type: EventType): string;
   /** Publishes an envelope directly, as if another service had sent it. */
   publish(envelope: AnyEnvelope): Promise<void>;
@@ -48,7 +55,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   // Outbox rows left by an earlier test file point at topics that file already deleted; a relay
   // would block on them. Every pipeline starts with empty outboxes and dedup tables.
   await db.query(
-    'TRUNCATE booking.outbox, booking.processed_events, payment.outbox, payment.processed_events',
+    `TRUNCATE booking.outbox, booking.processed_events, payment.outbox, payment.processed_events,
+              ticket.outbox, ticket.processed_events, notification.processed_events`,
   );
   const kafka = testKafka('pipeline-test');
   const producer = await createProducer(kafka);
@@ -76,10 +84,33 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
           outboxPollIntervalMs: 50,
         });
 
+  const sent: Parameters<Sender>[0][] = [];
+  const tickets = options.downstream
+    ? await startTicketService(deps, {
+        topicPrefix: topics.prefix,
+        concurrency: 6,
+        outboxBatchSize: 100,
+        outboxPollIntervalMs: 50,
+      })
+    : undefined;
+  const notifications = options.downstream
+    ? await startNotificationService(
+        {
+          ...deps,
+          send: (notification) => {
+            sent.push(notification);
+          },
+        },
+        { topicPrefix: topics.prefix, concurrency: 6 },
+      )
+    : undefined;
+
   // Consumers start at the earliest offset, but waiting for assignment keeps timings predictable.
   await Promise.all([
     ...Object.values(worker.consumers).map((c) => c.waitForAssignment()),
     payment?.consumer.waitForAssignment(),
+    tickets?.consumer.waitForAssignment(),
+    notifications?.waitForAssignment(),
   ]);
 
   return {
@@ -88,6 +119,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     producer,
     worker,
     payment,
+    sent,
     topic: (type) => topicName(topics.prefix, type),
     async publish(envelope) {
       await producer.send({
@@ -96,6 +128,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       });
     },
     async stop() {
+      await notifications?.stop();
+      await tickets?.stop();
       await payment?.stop();
       await worker.stop();
       await producer.disconnect();
