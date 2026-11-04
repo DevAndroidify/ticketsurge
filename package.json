@@ -25,6 +25,8 @@
     "test:all": "vitest run",
     "dev:api": "npm run dev -w @ticketsurge/api",
     "start:api": "npm run start -w @ticketsurge/api",
+    "dev:admission": "npm run dev -w @ticketsurge/admission-worker",
+    "start:admission": "npm run start -w @ticketsurge/admission-worker",
     "infra:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d --wait",
     "infra:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
     "infra:reset": "docker compose --env-file .env -f infra/docker-compose.yml down -v",

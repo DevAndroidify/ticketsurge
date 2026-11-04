@@ -27,6 +27,7 @@ export interface BookingRoutesOptions {
   redis: Redis;
   config: Pick<ApiConfig, 'PAYMENT_DEADLINE_MS' | 'HOLD_AFTER_DEADLINE_MS'>;
   authenticate: preHandlerAsyncHookHandler;
+  bookingRateLimit: preHandlerAsyncHookHandler;
 }
 
 const bookingBody = z.object({ holdId: z.uuid() });
@@ -48,7 +49,7 @@ function accepted(booking: BookingRow) {
 }
 
 export function bookingRoutes(app: FastifyInstance, options: BookingRoutesOptions): void {
-  const { db, redis, config, authenticate } = options;
+  const { db, redis, config, authenticate, bookingRateLimit } = options;
 
   /** Same key + same hold returns the original booking; same key + other hold is an error. */
   const replay = (existing: BookingRow, holdId: string) => {
@@ -62,71 +63,78 @@ export function bookingRoutes(app: FastifyInstance, options: BookingRoutesOption
     return accepted(existing);
   };
 
-  app.post('/bookings', { preHandler: authenticate }, async (request, reply) => {
-    const user = currentUser(request);
-    const parsedKey = idempotencyKey.safeParse(request.headers['idempotency-key']);
-    if (!parsedKey.success) {
-      throw badRequest('IDEMPOTENCY_KEY_REQUIRED', parsedKey.error.issues[0]?.message ?? 'invalid');
-    }
-    const key = parsedKey.data;
-    const { holdId } = bookingBody.parse(request.body);
+  app.post(
+    '/bookings',
+    { preHandler: [authenticate, bookingRateLimit] },
+    async (request, reply) => {
+      const user = currentUser(request);
+      const parsedKey = idempotencyKey.safeParse(request.headers['idempotency-key']);
+      if (!parsedKey.success) {
+        throw badRequest(
+          'IDEMPOTENCY_KEY_REQUIRED',
+          parsedKey.error.issues[0]?.message ?? 'invalid',
+        );
+      }
+      const key = parsedKey.data;
+      const { holdId } = bookingBody.parse(request.body);
 
-    const existing = await findByIdempotencyKey(db, user.id, key);
-    if (existing) return reply.code(202).send(replay(existing, holdId));
+      const existing = await findByIdempotencyKey(db, user.id, key);
+      if (existing) return reply.code(202).send(replay(existing, holdId));
 
-    // a + b: the hold must exist, belong to this user, and be extended to cover the payment window.
-    const holdTtlMs = config.PAYMENT_DEADLINE_MS + config.HOLD_AFTER_DEADLINE_MS;
-    const { eventId, seatIds } = await withRedis(redis, async () => {
-      const ref = await getHoldRef(redis, holdId);
-      const hold = ref ? await getHold(redis, ref, holdId) : undefined;
-      if (!ref || !hold || hold.owner !== user.id) throw holdGone();
-      // Extend the lookup key first so it can never expire before the hold.
-      await extendHoldRef(redis, holdId, holdTtlMs);
-      const extended = await extendHold(redis, {
-        eventId: ref,
-        holdId,
-        userId: user.id,
-        ttlMs: holdTtlMs,
-      });
-      if (!extended) throw holdGone();
-      return { eventId: ref, seatIds: hold.seatIds };
-    });
-
-    // c: booking, its seats, in one transaction. d: the unique index is the final protection.
-    try {
-      const booking = await createPendingBooking(db, {
-        eventId,
-        userId: user.id,
-        holdId,
-        seatIds,
-        idempotencyKey: key,
-        paymentDeadlineMs: config.PAYMENT_DEADLINE_MS,
-      });
-      return await reply.code(202).send(accepted(booking));
-    } catch (error) {
-      const info = pgErrorInfo(error);
-      if (info.code !== PG_UNIQUE_VIOLATION) throw error;
-
-      if (info.constraint === 'one_active_booking_per_seat') {
-        // Redis let the hold through (e.g. after a Redis restart), but PostgreSQL says no.
-        await withRedis(redis, async () => {
-          await releaseHold(redis, { eventId, holdId, seatIds, owner: user.id });
-          await deleteHoldRef(redis, holdId);
-        }).catch((releaseError: unknown) => {
-          request.log.warn({ err: releaseError, holdId }, 'could not release rejected hold');
+      // a + b: the hold must exist, belong to this user, and be extended to cover the payment window.
+      const holdTtlMs = config.PAYMENT_DEADLINE_MS + config.HOLD_AFTER_DEADLINE_MS;
+      const { eventId, seatIds } = await withRedis(redis, async () => {
+        const ref = await getHoldRef(redis, holdId);
+        const hold = ref ? await getHold(redis, ref, holdId) : undefined;
+        if (!ref || !hold || hold.owner !== user.id) throw holdGone();
+        // Extend the lookup key first so it can never expire before the hold.
+        await extendHoldRef(redis, holdId, holdTtlMs);
+        const extended = await extendHold(redis, {
+          eventId: ref,
+          holdId,
+          userId: user.id,
+          ttlMs: holdTtlMs,
         });
-        throw conflict('SEAT_TAKEN', 'One or more seats were already booked');
-      }
+        if (!extended) throw holdGone();
+        return { eventId: ref, seatIds: hold.seatIds };
+      });
 
-      // A concurrent request with the same key won the insert: return its booking.
-      const winner = await findByIdempotencyKey(db, user.id, key);
-      if (winner) return reply.code(202).send(replay(winner, holdId));
-      if (info.constraint === 'bookings_hold_id_unique') {
-        throw conflict('HOLD_ALREADY_BOOKED', 'This hold already has a booking');
+      // c: booking, its seats, in one transaction. d: the unique index is the final protection.
+      try {
+        const booking = await createPendingBooking(db, {
+          eventId,
+          userId: user.id,
+          holdId,
+          seatIds,
+          idempotencyKey: key,
+          paymentDeadlineMs: config.PAYMENT_DEADLINE_MS,
+        });
+        return await reply.code(202).send(accepted(booking));
+      } catch (error) {
+        const info = pgErrorInfo(error);
+        if (info.code !== PG_UNIQUE_VIOLATION) throw error;
+
+        if (info.constraint === 'one_active_booking_per_seat') {
+          // Redis let the hold through (e.g. after a Redis restart), but PostgreSQL says no.
+          await withRedis(redis, async () => {
+            await releaseHold(redis, { eventId, holdId, seatIds, owner: user.id });
+            await deleteHoldRef(redis, holdId);
+          }).catch((releaseError: unknown) => {
+            request.log.warn({ err: releaseError, holdId }, 'could not release rejected hold');
+          });
+          throw conflict('SEAT_TAKEN', 'One or more seats were already booked');
+        }
+
+        // A concurrent request with the same key won the insert: return its booking.
+        const winner = await findByIdempotencyKey(db, user.id, key);
+        if (winner) return reply.code(202).send(replay(winner, holdId));
+        if (info.constraint === 'bookings_hold_id_unique') {
+          throw conflict('HOLD_ALREADY_BOOKED', 'This hold already has a booking');
+        }
+        throw error;
       }
-      throw error;
-    }
-  });
+    },
+  );
 
   app.get('/bookings/:id', { preHandler: authenticate }, async (request) => {
     const user = currentUser(request);

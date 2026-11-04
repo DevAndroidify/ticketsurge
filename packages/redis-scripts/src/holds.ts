@@ -12,7 +12,6 @@ export interface HoldSeatsInput {
   userId: string;
   seatIds: readonly string[];
   ttlMs: number;
-  requireAdmission: boolean;
 }
 
 export type HoldSeatsResult =
@@ -29,7 +28,7 @@ export async function holdSeats(redis: Redis, input: HoldSeatsInput): Promise<Ho
       keys.hold(input.eventId, input.holdId),
       ...input.seatIds.map((seatId) => keys.seat(input.eventId, seatId)),
     ],
-    [input.holdId, input.userId, input.ttlMs, input.requireAdmission ? '1' : '0', ...input.seatIds],
+    [input.holdId, input.userId, input.ttlMs, ...input.seatIds],
   );
   const [status, ...rest] = reply as string[];
   if (status === 'OK') return { status: 'held' };

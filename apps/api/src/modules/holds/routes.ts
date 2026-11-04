@@ -20,15 +20,16 @@ import { holdHasBooking } from '../bookings/repository.js';
 export interface HoldRoutesOptions {
   db: pg.Pool;
   redis: Redis;
-  config: Pick<ApiConfig, 'HOLD_TTL_MS' | 'MAX_SEATS_PER_HOLD' | 'ADMISSION_BYPASS'>;
+  config: Pick<ApiConfig, 'HOLD_TTL_MS' | 'MAX_SEATS_PER_HOLD'>;
   authenticate: preHandlerAsyncHookHandler;
+  holdRateLimit: preHandlerAsyncHookHandler;
 }
 
 const eventParams = z.object({ id: z.uuid() });
 const holdParams = z.object({ holdId: z.uuid() });
 
 export function holdRoutes(app: FastifyInstance, options: HoldRoutesOptions): void {
-  const { db, redis, config, authenticate } = options;
+  const { db, redis, config, authenticate, holdRateLimit } = options;
 
   const holdBody = z.object({
     seatIds: z
@@ -38,66 +39,69 @@ export function holdRoutes(app: FastifyInstance, options: HoldRoutesOptions): vo
       .refine((ids) => new Set(ids).size === ids.length, 'seat IDs must be unique'),
   });
 
-  app.post('/events/:id/holds', { preHandler: authenticate }, async (request, reply) => {
-    const user = currentUser(request);
-    const { id: eventId } = eventParams.parse(request.params);
-    const { seatIds } = holdBody.parse(request.body);
+  app.post(
+    '/events/:id/holds',
+    { preHandler: [authenticate, holdRateLimit] },
+    async (request, reply) => {
+      const user = currentUser(request);
+      const { id: eventId } = eventParams.parse(request.params);
+      const { seatIds } = holdBody.parse(request.body);
 
-    const { rows } = await db.query<{ status: string; on_sale: boolean }>(
-      `SELECT status, sale_starts_at <= now() AS on_sale FROM booking.events
+      const { rows } = await db.query<{ status: string; on_sale: boolean }>(
+        `SELECT status, sale_starts_at <= now() AS on_sale FROM booking.events
        WHERE id = $1 AND status <> 'DRAFT'`,
-      [eventId],
-    );
-    const event = rows[0];
-    if (!event) throw notFound('Event not found');
-    if (event.status !== 'PUBLISHED' || !event.on_sale) {
-      throw forbidden('SALE_NOT_OPEN', 'This event is not on sale');
-    }
+        [eventId],
+      );
+      const event = rows[0];
+      if (!event) throw notFound('Event not found');
+      if (event.status !== 'PUBLISHED' || !event.on_sale) {
+        throw forbidden('SALE_NOT_OPEN', 'This event is not on sale');
+      }
 
-    // Redis keys are only created for real seats of this event.
-    const known = await db.query<{ id: string }>(
-      'SELECT id FROM booking.seats WHERE event_id = $1 AND id = ANY($2::uuid[])',
-      [eventId, seatIds],
-    );
-    if (known.rowCount !== seatIds.length) {
-      const found = new Set(known.rows.map((row) => row.id));
-      throw badRequest('UNKNOWN_SEATS', 'Some seats do not belong to this event', {
-        seatIds: seatIds.filter((seatId) => !found.has(seatId)),
+      // Redis keys are only created for real seats of this event.
+      const known = await db.query<{ id: string }>(
+        'SELECT id FROM booking.seats WHERE event_id = $1 AND id = ANY($2::uuid[])',
+        [eventId, seatIds],
+      );
+      if (known.rowCount !== seatIds.length) {
+        const found = new Set(known.rows.map((row) => row.id));
+        throw badRequest('UNKNOWN_SEATS', 'Some seats do not belong to this event', {
+          seatIds: seatIds.filter((seatId) => !found.has(seatId)),
+        });
+      }
+
+      const holdId = randomUUID();
+      const ttlMs = config.HOLD_TTL_MS;
+      const result = await withRedis(redis, async () => {
+        // Written first so it always outlives the hold; harmless if the hold then fails.
+        await setHoldRef(redis, holdId, eventId, ttlMs);
+        const outcome = await holdSeats(redis, {
+          eventId,
+          holdId,
+          userId: user.id,
+          seatIds,
+          ttlMs,
+        });
+        if (outcome.status !== 'held') await deleteHoldRef(redis, holdId);
+        return outcome;
       });
-    }
 
-    const holdId = randomUUID();
-    const ttlMs = config.HOLD_TTL_MS;
-    const result = await withRedis(redis, async () => {
-      // Written first so it always outlives the hold; harmless if the hold then fails.
-      await setHoldRef(redis, holdId, eventId, ttlMs);
-      const outcome = await holdSeats(redis, {
-        eventId,
+      if (result.status === 'not_admitted') {
+        throw forbidden('NOT_ADMITTED', 'Join the queue and wait to be admitted first');
+      }
+      if (result.status === 'conflict') {
+        throw conflict('SEATS_UNAVAILABLE', 'Some seats are no longer available', {
+          seatIds: result.seatIds,
+        });
+      }
+      return reply.code(201).send({
         holdId,
-        userId: user.id,
+        eventId,
         seatIds,
-        ttlMs,
-        requireAdmission: !config.ADMISSION_BYPASS,
+        expiresAt: new Date(Date.now() + ttlMs).toISOString(),
       });
-      if (outcome.status !== 'held') await deleteHoldRef(redis, holdId);
-      return outcome;
-    });
-
-    if (result.status === 'not_admitted') {
-      throw forbidden('NOT_ADMITTED', 'Join the queue and wait to be admitted first');
-    }
-    if (result.status === 'conflict') {
-      throw conflict('SEATS_UNAVAILABLE', 'Some seats are no longer available', {
-        seatIds: result.seatIds,
-      });
-    }
-    return reply.code(201).send({
-      holdId,
-      eventId,
-      seatIds,
-      expiresAt: new Date(Date.now() + ttlMs).toISOString(),
-    });
-  });
+    },
+  );
 
   app.delete('/holds/:holdId', { preHandler: authenticate }, async (request, reply) => {
     const user = currentUser(request);

@@ -1,6 +1,7 @@
 // Integration harness: real PostgreSQL/Redis/Kafka from docker compose, test DB + Redis DB 1.
 import { randomUUID } from 'node:crypto';
 import { createLogger, loadConfig } from '@ticketsurge/config';
+import { keys } from '@ticketsurge/redis-scripts';
 import type { Redis } from 'ioredis';
 import type pg from 'pg';
 import { TEST_REDIS_DB, useTestEnv } from '../../../../scripts/src/testing/test-env.js';
@@ -19,7 +20,20 @@ export const logger = createLogger({
 export const TEST_ADMIN_EMAIL = 'admin@test.local';
 
 export function integrationConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
-  return { ...loadConfig(apiConfigSchema), ADMIN_EMAILS: [TEST_ADMIN_EMAIL], ...overrides };
+  return {
+    ...loadConfig(apiConfigSchema),
+    ADMIN_EMAILS: [TEST_ADMIN_EMAIL],
+    // Tests fire many requests per user; the rate-limit test sets its own low limits.
+    RATE_LIMIT_QUEUE_JOIN: 10_000,
+    RATE_LIMIT_HOLDS: 10_000,
+    RATE_LIMIT_BOOKINGS: 10_000,
+    ...overrides,
+  };
+}
+
+/** Marks a user as admitted for an event, as the admission worker would. */
+export async function admit(t: TestApp, eventId: string, userId: string, ttlMs = 300_000) {
+  await t.clients.redis.set(keys.admit(eventId, userId), '1', 'PX', ttlMs);
 }
 
 export interface TestUser {

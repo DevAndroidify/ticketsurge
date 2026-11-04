@@ -3,6 +3,7 @@ import { keys } from '@ticketsurge/redis-scripts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEMO_EVENT_ID, seedDemoEvent } from '../../../scripts/src/lib/seed.js';
 import {
+  admit,
   bearer,
   createTestApp,
   resetDatabase,
@@ -19,7 +20,7 @@ let baseUrl: string;
 let seatIds: string[];
 
 beforeAll(async () => {
-  t = await createTestApp({ HOLD_TTL_MS, ADMISSION_BYPASS: true });
+  t = await createTestApp({ HOLD_TTL_MS });
   // A real listening server, so the 100 requests below are truly concurrent HTTP requests.
   baseUrl = await t.app.listen({ host: '127.0.0.1', port: 0 });
 });
@@ -36,6 +37,13 @@ beforeEach(async () => {
   );
   seatIds = rows.map((row) => row.id);
 });
+
+/** A user the admission worker has let in for the demo event. */
+async function admittedUser() {
+  const user = await tokenFor(t);
+  await admit(t, DEMO_EVENT_ID, user.id);
+  return user;
+}
 
 async function seatStatus(seatId: string): Promise<string | undefined> {
   const response = await t.app.inject(`/events/${DEMO_EVENT_ID}/seats`);
@@ -54,7 +62,7 @@ function postHold(token: string, ids: string[], eventId = DEMO_EVENT_ID) {
 describe('POST /events/:id/holds under contention', () => {
   it('lets exactly one of 100 parallel requests hold a seat, and frees it after the TTL', async () => {
     const seatId = seatIds[0] ?? '';
-    const users = await Promise.all(Array.from({ length: 100 }, () => tokenFor(t)));
+    const users = await Promise.all(Array.from({ length: 100 }, () => admittedUser()));
 
     const responses = await Promise.all(users.map((user) => postHold(user.token, [seatId])));
     const statuses = responses.map((response) => response.status);
@@ -73,14 +81,14 @@ describe('POST /events/:id/holds under contention', () => {
     await sleep(HOLD_TTL_MS + 300);
     expect(await t.clients.redis.exists(keys.seat(DEMO_EVENT_ID, seatId))).toBe(0);
     expect(await seatStatus(seatId)).toBe('available');
-    const again = await postHold((await tokenFor(t)).token, [seatId]);
+    const again = await postHold((await admittedUser()).token, [seatId]);
     expect(again.status).toBe(201);
   });
 });
 
 describe('POST /events/:id/holds validation', () => {
   it('returns 201 with holdId and expiresAt for a multi-seat hold', async () => {
-    const user = await tokenFor(t);
+    const user = await admittedUser();
     const started = Date.now();
     const response = await postHold(user.token, seatIds.slice(0, 3));
     expect(response.status).toBe(201);
@@ -97,13 +105,13 @@ describe('POST /events/:id/holds validation', () => {
     ['too many seats', () => seatIds.slice(0, 9), 400],
     ['no seats', () => [], 400],
   ])('rejects %s', async (_label, pick, status) => {
-    const user = await tokenFor(t);
+    const user = await admittedUser();
     const response = await postHold(user.token, pick() as string[]);
     expect(response.status).toBe(status);
   });
 
   it('returns 404 for an unknown event', async () => {
-    const response = await postHold((await tokenFor(t)).token, [seatIds[0] ?? ''], randomUUID());
+    const response = await postHold((await admittedUser()).token, [seatIds[0] ?? ''], randomUUID());
     expect(response.status).toBe(404);
   });
 
@@ -112,14 +120,14 @@ describe('POST /events/:id/holds validation', () => {
       "UPDATE booking.events SET sale_starts_at = now() + interval '1 day' WHERE id = $1",
       [DEMO_EVENT_ID],
     );
-    const response = await postHold((await tokenFor(t)).token, [seatIds[0] ?? '']);
+    const response = await postHold((await admittedUser()).token, [seatIds[0] ?? '']);
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ error: { code: 'SALE_NOT_OPEN' } });
   });
 
   it('a conflicting multi-seat request holds nothing', async () => {
-    await postHold((await tokenFor(t)).token, [seatIds[1] ?? '']);
-    const response = await postHold((await tokenFor(t)).token, seatIds.slice(0, 3));
+    await postHold((await admittedUser()).token, [seatIds[1] ?? '']);
+    const response = await postHold((await admittedUser()).token, seatIds.slice(0, 3));
     expect(response.status).toBe(409);
     expect(await seatStatus(seatIds[0] ?? '')).toBe('available');
     expect(await seatStatus(seatIds[2] ?? '')).toBe('available');
@@ -128,11 +136,11 @@ describe('POST /events/:id/holds validation', () => {
 
 describe('DELETE /holds/:holdId', () => {
   it('releases the owner’s hold, and returns 404 to anyone else or on repeat', async () => {
-    const owner = await tokenFor(t);
+    const owner = await admittedUser();
     const created = await postHold(owner.token, seatIds.slice(0, 2));
     const { holdId } = (await created.json()) as { holdId: string };
 
-    const stranger = await tokenFor(t);
+    const stranger = await admittedUser();
     const asStranger = await t.app.inject({
       method: 'DELETE',
       url: `/holds/${holdId}`,
@@ -160,30 +168,31 @@ describe('DELETE /holds/:holdId', () => {
 });
 
 describe('admission', () => {
-  it('returns 403 NOT_ADMITTED when the bypass flag is off', async () => {
-    const strict = await createTestApp({ ADMISSION_BYPASS: false });
-    try {
-      const user = await tokenFor(strict);
-      const response = await strict.app.inject({
-        method: 'POST',
-        url: `/events/${DEMO_EVENT_ID}/holds`,
-        headers: bearer(user),
-        payload: { seatIds: [seatIds[0]] },
-      });
-      expect(response.statusCode).toBe(403);
-      expect(response.json()).toMatchObject({ error: { code: 'NOT_ADMITTED' } });
-    } finally {
-      await strict.close();
-    }
+  it('returns 403 NOT_ADMITTED for a user who was not admitted, and holds nothing', async () => {
+    const user = await tokenFor(t);
+    const response = await postHold(user.token, [seatIds[0] ?? '']);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: 'NOT_ADMITTED' } });
+    expect(await seatStatus(seatIds[0] ?? '')).toBe('available');
+  });
+
+  it('returns 403 once the admission has expired', async () => {
+    const user = await tokenFor(t);
+    await admit(t, DEMO_EVENT_ID, user.id, 100);
+    await sleep(200);
+    expect((await postHold(user.token, [seatIds[0] ?? ''])).status).toBe(403);
+  });
+
+  it('admission for one event does not admit to another', async () => {
+    const user = await tokenFor(t);
+    await admit(t, randomUUID(), user.id);
+    expect((await postHold(user.token, [seatIds[0] ?? ''])).status).toBe(403);
   });
 });
 
 describe('when Redis is unavailable', () => {
   it('returns 503 for holds and still serves a degraded seat map', async () => {
-    const broken = await createTestApp({
-      REDIS_URL: 'redis://127.0.0.1:1/1',
-      ADMISSION_BYPASS: true,
-    });
+    const broken = await createTestApp({ REDIS_URL: 'redis://127.0.0.1:1/1' });
     try {
       const user = await tokenFor(broken);
       const hold = await broken.app.inject({

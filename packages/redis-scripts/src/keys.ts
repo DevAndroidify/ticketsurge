@@ -14,6 +14,16 @@ export const keys = {
    * hold keys are partitioned by event. Written before the hold and always outlives it.
    */
   holdRef: (holdId: string) => `holdref:${holdId}`,
+  /** Waiting users: member = userId, score = join sequence. */
+  queue: (eventId: string) => `queue:{${eventId}}`,
+  /** Increasing join counter for the queue. */
+  queueSeq: (eventId: string) => `queue:{${eventId}}:seq`,
+  /** Set of event IDs that have a queue; the admission worker iterates it. */
+  activeQueues: 'queues:active',
+  /** Per-event lock so only one admission worker admits per interval. */
+  admissionTick: (eventId: string) => `admission:{${eventId}}:tick`,
+  /** Fixed-window rate-limit counter. */
+  rateLimit: (route: string, userId: string) => `rl:${route}:${userId}`,
 } as const;
 
 export type SeatState = { kind: 'hold'; holdId: string } | { kind: 'sold'; bookingId: string };

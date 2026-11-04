@@ -40,4 +40,8 @@ npm run lint              # eslint + prettier check
 npm test                  # unit tests
 npm run test:integration  # tests against the running containers
 npm run dev:api           # run the API with watch mode
+npm run dev:admission     # run the admission worker with watch mode
+npm run db:migrate        # apply SQL migrations; npm run db:seed for the 500-seat demo event
 ```
+
+Integration tests use a separate `<db>_test` database and Redis DB 1 (see scripts/src/testing).

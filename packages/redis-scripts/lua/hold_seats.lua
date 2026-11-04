@@ -3,16 +3,16 @@
 --
 -- KEYS[1]    admit:{eventId}:{userId}   admission marker
 -- KEYS[2]    hold:{eventId}:{holdId}    hold hash (owner, seat IDs)
--- KEYS[3..n] seat:{eventId}:{seatId}    one per requested seat, same order as ARGV[5..n]
+-- KEYS[3..n] seat:{eventId}:{seatId}    one per requested seat, same order as ARGV[4..n]
 -- ARGV[1]    holdId
 -- ARGV[2]    userId
 -- ARGV[3]    TTL in milliseconds
--- ARGV[4]    '1' to require admission, '0' to skip it
--- ARGV[5..n] seat IDs
+-- ARGV[4..n] seat IDs
 --
 -- Returns {'OK'} | {'NOT_ADMITTED'} | {'CONFLICT', seatId, ...}
 
-if ARGV[4] == '1' and redis.call('EXISTS', KEYS[1]) == 0 then
+-- Only users let out of the virtual queue may hold seats.
+if redis.call('EXISTS', KEYS[1]) == 0 then
   return { 'NOT_ADMITTED' }
 end
 
@@ -20,7 +20,7 @@ end
 local conflicts = { 'CONFLICT' }
 for i = 3, #KEYS do
   if redis.call('EXISTS', KEYS[i]) == 1 then
-    conflicts[#conflicts + 1] = ARGV[i + 2]
+    conflicts[#conflicts + 1] = ARGV[i + 1]
   end
 end
 if #conflicts > 1 then
@@ -34,6 +34,6 @@ for i = 3, #KEYS do
 end
 
 -- The hash shares the seats' TTL, so it disappears together with them.
-redis.call('HSET', KEYS[2], 'owner', ARGV[2], 'seats', table.concat(ARGV, ',', 5))
+redis.call('HSET', KEYS[2], 'owner', ARGV[2], 'seats', table.concat(ARGV, ',', 4))
 redis.call('PEXPIRE', KEYS[2], ttl)
 return { 'OK' }

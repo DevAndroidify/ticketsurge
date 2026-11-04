@@ -16,3 +16,11 @@ export {
   type HoldSeatsResult,
   type ReleaseHoldInput,
 } from './holds.js';
+export {
+  admitNext,
+  joinQueue,
+  queueStatus,
+  rateLimit,
+  type QueueStatus,
+  type RateLimitResult,
+} from './queue.js';

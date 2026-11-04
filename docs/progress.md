@@ -7,7 +7,7 @@
 | 3     | Auth                          | Done        |
 | 4     | Seat holds                    | Done        |
 | 5     | Bookings and final protection | Done        |
-| 6     | Virtual queue and rate limits | Not started |
+| 6     | Virtual queue and rate limits | Done        |
 | 7     | Kafka and outbox              | Not started |
 | 8     | Payment and saga              | Not started |
 | 9     | Expiry and refunds            | Not started |
@@ -112,3 +112,25 @@ Decisions:
 Notes:
 
 - The `booking.requested` outbox row (brief step 3c) is added in Phase 7 together with the outbox table.
+
+## Phase 6: Virtual queue and rate limits (done 2026-11-04)
+
+- Lua scripts `joinQueue` (one place per user, strictly increasing sequence), `admitNext` (pops the next
+  N users and sets `admit:{eventId}:{userId}` with a 5-minute TTL in one step), and `rateLimit`
+  (fixed window per user and route).
+- `POST /events/:id/queue` (position, or admitted with `admissionExpiresAt`) and
+  `GET /events/:id/queue/me` (404 if not queued). Joining is allowed before the sale opens.
+- `apps/admission-worker`: every `ADMISSION_INTERVAL_MS`, admits up to `ADMISSION_BATCH_SIZE` users per
+  event. A per-event `SET NX PX` lock keeps the rate correct when several worker instances run.
+- Rate limits (429 with `Retry-After`) on queue joins, holds, and bookings; all limits are configurable.
+- `ADMISSION_BYPASS` removed: `holdSeats` always requires admission.
+- Tests: users are admitted in join order (8 users, batches of 3); holds without admission (never joined,
+  still waiting, expired, or admitted to another event) return 403; 300 concurrent joins get positions
+  1-300; two concurrent workers admit only one batch; rate limits return 429; queue endpoints return 503
+  when Redis is down.
+
+Decisions:
+
+- Added a `joinQueue` Lua script (not in the brief's list) so joining is atomic.
+- The worker finds events through a Redis set `queues:active`, so it needs no access to the booking
+  schema.

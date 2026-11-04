@@ -3,6 +3,7 @@ import { keys } from '@ticketsurge/redis-scripts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEMO_EVENT_ID, DEMO_SECTIONS, seedDemoEvent } from '../../../scripts/src/lib/seed.js';
 import {
+  admit,
   bearer,
   createTestApp,
   registerUser,
@@ -20,7 +21,7 @@ let seatIds: string[];
 let user: TestUser;
 
 beforeAll(async () => {
-  t = await createTestApp({ ADMISSION_BYPASS: true, PAYMENT_DEADLINE_MS, HOLD_AFTER_DEADLINE_MS });
+  t = await createTestApp({ PAYMENT_DEADLINE_MS, HOLD_AFTER_DEADLINE_MS });
 });
 afterAll(async () => {
   await t.close();
@@ -39,6 +40,7 @@ beforeEach(async () => {
 });
 
 async function createHold(owner: TestUser, ids: string[]): Promise<string> {
+  await admit(t, DEMO_EVENT_ID, owner.id);
   const response = await t.app.inject({
     method: 'POST',
     url: `/events/${DEMO_EVENT_ID}/holds`,

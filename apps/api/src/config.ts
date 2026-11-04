@@ -44,8 +44,12 @@ export const apiConfigSchema = z.object({
   PAYMENT_DEADLINE_MS: durationMsSchema.default(300_000),
   // POST /bookings resets the hold to expire this long after the payment deadline.
   HOLD_AFTER_DEADLINE_MS: durationMsSchema.default(60_000),
-  // TEMPORARY (Phase 4 only): skip the admission check in holdSeats until the queue exists.
-  ADMISSION_BYPASS: z.stringbool().default(false),
+
+  // Per-user limits per RATE_LIMIT_WINDOW_MS.
+  RATE_LIMIT_WINDOW_MS: durationMsSchema.default(10_000),
+  RATE_LIMIT_QUEUE_JOIN: z.coerce.number().int().min(1).default(5),
+  RATE_LIMIT_HOLDS: z.coerce.number().int().min(1).default(10),
+  RATE_LIMIT_BOOKINGS: z.coerce.number().int().min(1).default(10),
 });
 
 export type ApiConfig = z.infer<typeof apiConfigSchema>;

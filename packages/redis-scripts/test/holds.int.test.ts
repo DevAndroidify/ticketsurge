@@ -33,15 +33,18 @@ afterAll(async () => {
   await redis.quit();
 });
 
-function hold(overrides: Partial<HoldSeatsInput> = {}) {
+/** Holds seats as an admitted user (pass `admitted: false` to skip admission). */
+async function hold(overrides: Partial<HoldSeatsInput> & { admitted?: boolean } = {}) {
+  const { admitted = true, ...input } = overrides;
+  const userId = input.userId ?? randomUUID();
+  if (admitted) await redis.set(keys.admit(eventId, userId), '1', 'PX', 60_000);
   return holdSeats(redis, {
     eventId,
     holdId: randomUUID(),
-    userId: randomUUID(),
     seatIds: seats.slice(0, 2),
     ttlMs: 10_000,
-    requireAdmission: false,
-    ...overrides,
+    ...input,
+    userId,
   });
 }
 
@@ -74,11 +77,11 @@ describe('holdSeats', () => {
     expect(await redis.exists(keys.hold(eventId, holdId))).toBe(0);
   });
 
-  it('requires admission when asked to', async () => {
+  it('requires admission and writes nothing without it', async () => {
     const userId = randomUUID();
-    expect(await hold({ userId, requireAdmission: true })).toEqual({ status: 'not_admitted' });
-    await redis.set(keys.admit(eventId, userId), '1', 'PX', 5_000);
-    expect(await hold({ userId, requireAdmission: true })).toEqual({ status: 'held' });
+    expect(await hold({ userId, admitted: false })).toEqual({ status: 'not_admitted' });
+    expect(await getSeatStates(redis, eventId, seats)).toEqual(new Map());
+    expect(await hold({ userId })).toEqual({ status: 'held' });
   });
 
   it('frees the seats when the TTL passes', async () => {

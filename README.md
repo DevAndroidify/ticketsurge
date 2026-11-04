@@ -29,8 +29,23 @@ npm run build
 npm run db:migrate          # apply SQL migrations
 npm run db:seed             # demo event with 500 seats
 npm run dev:api             # http://localhost:3000
+npm run dev:admission       # in a second terminal: lets users out of the queue
 curl localhost:3000/health
 ```
+
+## Buying a seat (current API)
+
+| Step | Request                                           | Result                                          |
+| ---- | ------------------------------------------------- | ----------------------------------------------- |
+| 1    | `POST /auth/register` `{ email, password }`       | `accessToken` (send as `Authorization: Bearer`) |
+| 2    | `POST /events/:id/queue`                          | queue position                                  |
+| 3    | `GET /events/:id/queue/me` until `admitted: true` | admitted for 5 minutes                          |
+| 4    | `GET /events/:id/seats`                           | seat map with `available` / `held` / `sold`     |
+| 5    | `POST /events/:id/holds` `{ seatIds }`            | 201 `holdId`, `expiresAt` (all seats or none)   |
+| 6    | `POST /bookings` `{ holdId }` + `Idempotency-Key` | 202 `bookingId`, status `PENDING_PAYMENT`       |
+| 7    | `GET /bookings/:id`                               | booking with its seats                          |
+
+Admins (emails in `ADMIN_EMAILS`) create events with `POST /admin/events`.
 
 Kafka UI: http://localhost:8080
 
@@ -42,6 +57,8 @@ Kafka UI: http://localhost:8080
 | `npm run build`            | Compile every workspace (`tsc -b`)              |
 | `npm run db:migrate`       | Apply pending SQL migrations                    |
 | `npm run db:seed`          | Create the 500-seat demo event (idempotent)     |
+| `npm run dev:api`          | API with watch mode                             |
+| `npm run dev:admission`    | Admission worker with watch mode                |
 | `npm run typecheck`        | Type-check sources and tests                    |
 | `npm run lint`             | ESLint (type-aware) and Prettier check          |
 | `npm test`                 | Unit tests                                      |

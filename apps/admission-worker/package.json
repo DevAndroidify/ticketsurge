@@ -1,0 +1,12 @@
+{
+  "name": "@ticketsurge/admission-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Moves users from the virtual queue to admitted at a configured rate",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "dev": "tsx watch --conditions=source src/main.ts | pino-pretty",
+    "start": "node dist/main.js"
+  }
+}

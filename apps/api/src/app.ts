@@ -12,6 +12,8 @@ import { TokenService } from './modules/auth/tokens.js';
 import { bookingRoutes } from './modules/bookings/routes.js';
 import { eventRoutes } from './modules/events/routes.js';
 import { holdRoutes } from './modules/holds/routes.js';
+import { queueRoutes } from './modules/queue/routes.js';
+import { createRateLimiter } from './rate-limit.js';
 import { healthRoutes } from './routes/health.js';
 
 export interface AppDeps {
@@ -46,9 +48,28 @@ export async function buildApp({ logger, config, db, redis, healthChecks }: AppD
     timeoutMs: config.HEALTH_CHECK_TIMEOUT_MS,
   });
   authRoutes(app, { db, tokens });
+  const limit = createRateLimiter(redis, config.RATE_LIMIT_WINDOW_MS);
   eventRoutes(app, { db, redis });
-  holdRoutes(app, { db, redis, config, authenticate });
-  bookingRoutes(app, { db, redis, config, authenticate });
+  queueRoutes(app, {
+    db,
+    redis,
+    authenticate,
+    joinRateLimit: limit('queue-join', config.RATE_LIMIT_QUEUE_JOIN),
+  });
+  holdRoutes(app, {
+    db,
+    redis,
+    config,
+    authenticate,
+    holdRateLimit: limit('holds', config.RATE_LIMIT_HOLDS),
+  });
+  bookingRoutes(app, {
+    db,
+    redis,
+    config,
+    authenticate,
+    bookingRateLimit: limit('bookings', config.RATE_LIMIT_BOOKINGS),
+  });
   adminRoutes(app, { db, requireAdmin });
 
   return app;
