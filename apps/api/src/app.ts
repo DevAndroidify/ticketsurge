@@ -5,6 +5,7 @@ import Fastify, { LogController, type FastifyBaseLogger } from 'fastify';
 import type { Redis } from 'ioredis';
 import type pg from 'pg';
 import type { ApiConfig } from './config.js';
+import { registerCors } from './cors.js';
 import { registerErrorHandler } from './errors.js';
 import type { HealthCheck } from './health/run-checks.js';
 import { adminRoutes } from './modules/admin/routes.js';
@@ -56,6 +57,7 @@ export async function buildApp({ logger, config, db, redis, healthChecks }: AppD
     },
   });
   registerErrorHandler(app);
+  registerCors(app, config.CORS_ORIGINS);
 
   const registry = createRegistry('api');
   const recordHttp = httpMetrics(registry);

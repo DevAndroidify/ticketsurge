@@ -43,6 +43,7 @@ npm run dev:all           # run all eight services with watch mode in one termin
 npm run dev:api           # run the API with watch mode
 npm run dev:admission     # run the admission worker with watch mode
 npm run db:migrate        # apply SQL migrations; npm run db:seed for the 500-seat demo event
+npm run demo:new-event    # open a fresh 500-seat event when the demo one has sold out
 ```
 
 Integration tests use a separate `<db>_test` database and Redis DB 1 (see scripts/src/testing).

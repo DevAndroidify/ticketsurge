@@ -374,3 +374,12 @@ Findings:
 - The relay was stopped for 78 s instead of 60 s because the Redis restart drill ran inside that window.
 - Memory is the limit on this machine (3.7 GB WSL): Kafka UI and Grafana are stopped during runs, and
   k6 runs 200 users at a time.
+
+## Demo-site support (2026-11-10)
+
+- `CORS_ORIGINS` (API, off by default): exact browser origins allowed to call the API directly, so
+  a hosted copy of the demo site can connect to a backend on the visitor's machine. Preflights also
+  answer Chrome's Private Network Access check. The WebSocket gateway needs no change: browsers do
+  not apply CORS to WebSockets, and every socket still needs a valid token.
+- `npm run demo:new-event`: opens a new 500-seat event on sale now. Used instead of resetting a
+  sold-out event, so past bookings, payments and tickets are never rewritten.

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../src/lib/migrations.js';
-import { DEMO_EVENT_ID, seedDemoEvent } from '../src/lib/seed.js';
+import { createSaleEvent, DEMO_EVENT_ID, seedDemoEvent } from '../src/lib/seed.js';
 import { useTestEnv } from '../src/testing/test-env.js';
 
 const { databaseUrl } = useTestEnv();
@@ -61,5 +61,20 @@ describe('seedDemoEvent', () => {
     await pool.query('TRUNCATE booking.events, booking.users, booking.outbox CASCADE');
     expect(await seedDemoEvent(pool)).toEqual({ eventId: DEMO_EVENT_ID, seats: 500 });
     expect(await seedDemoEvent(pool)).toEqual({ eventId: DEMO_EVENT_ID, seats: 500 });
+  });
+});
+
+describe('createSaleEvent', () => {
+  it('opens a new 500-seat event on sale now, each time', async () => {
+    const first = await createSaleEvent(pool, { name: 'Flash sale A', venue: 'Demo Arena' });
+    const second = await createSaleEvent(pool, { name: 'Flash sale B', venue: 'Demo Arena' });
+    expect(first.seats).toBe(500);
+    expect(second.eventId).not.toBe(first.eventId);
+    const { rows } = await pool.query<{ on_sale: boolean }>(
+      `SELECT status = 'PUBLISHED' AND sale_starts_at <= now() AS on_sale
+       FROM booking.events WHERE id = $1`,
+      [second.eventId],
+    );
+    expect(rows[0]?.on_sale).toBe(true);
   });
 });

@@ -38,6 +38,27 @@ export const apiConfigSchema = z.object({
         .filter((email) => email.length > 0),
     )
     .pipe(z.array(z.email())),
+  // Browser origins allowed to call the API directly (CORS), e.g. a hosted copy of the demo
+  // site. Exact origins only: scheme, host and optional port, no path. Empty turns CORS off.
+  CORS_ORIGINS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((origin) => origin.trim().replace(/\/$/, ''))
+        .filter((origin) => origin.length > 0),
+    )
+    .pipe(
+      z.array(
+        z
+          .string()
+          .regex(
+            /^https?:\/\/[^/\s]+$/,
+            'must be an origin like https://example.com, with no path',
+          ),
+      ),
+    ),
 
   // Redis commands that take longer than this fail, and the request gets 503.
   REDIS_COMMAND_TIMEOUT_MS: durationMsSchema.default(1000),

@@ -13,7 +13,8 @@
     "analytics-rebuild": "tsx --conditions=source src/cli/analytics-rebuild.ts",
     "redis-rebuild": "tsx --conditions=source src/cli/redis-rebuild.ts",
     "consistency-check": "tsx --conditions=source src/cli/consistency-check.ts",
-    "loadtest-prepare": "tsx --conditions=source src/cli/loadtest-prepare.ts"
+    "loadtest-prepare": "tsx --conditions=source src/cli/loadtest-prepare.ts",
+    "new-event": "tsx --conditions=source src/cli/new-event.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"

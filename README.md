@@ -19,4 +19,8 @@ npm run build && npm run db:migrate && npm run db:seed && npm run kafka:topics
 npm run dev:all        # all eight services in one terminal, logs prefixed by service
 ```
 
+To watch it under load, open the [demo site](https://github.com/DevAndroidify/ticketsurge-web)
+and press **Connect my backend** (set `CORS_ORIGINS` in `.env` to the site's address first). When
+the demo event sells out, `npm run demo:new-event` opens a fresh one.
+
 More detail: [docs/architecture.md](docs/architecture.md) and [docs/progress.md](docs/progress.md).
