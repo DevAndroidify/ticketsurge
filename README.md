@@ -1,5 +1,9 @@
 # TicketSurge
 
+**Live demo: [ticketsurge-web.vercel.app](https://ticketsurge-web.vercel.app)**. Open it and press
+**Start a sale** to watch a flash sale run, no setup needed.
+([Demo site source](https://github.com/DevAndroidify/ticketsurge-web))
+
 TicketSurge is the backend of a flash-sale ticketing platform: thousands of people try to buy a
 limited number of seats at the same moment, and every seat must be sold exactly once.
 
@@ -19,8 +23,8 @@ npm run build && npm run db:migrate && npm run db:seed && npm run kafka:topics
 npm run dev:all        # all eight services in one terminal, logs prefixed by service
 ```
 
-To watch it under load, open the [demo site](https://github.com/DevAndroidify/ticketsurge-web)
-and press **Connect my backend** (set `CORS_ORIGINS` in `.env` to the site's address first). When
-the demo event sells out, `npm run demo:new-event` opens a fresh one.
+The live demo runs a simulation in your browser. With the commands above running, press **Connect
+my backend** on it to drive these real services instead; `.env.example` already allows the site in
+`CORS_ORIGINS`. When the demo event sells out, `npm run demo:new-event` opens a fresh one.
 
 More detail: [docs/architecture.md](docs/architecture.md) and [docs/progress.md](docs/progress.md).

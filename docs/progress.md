@@ -381,5 +381,7 @@ Findings:
   a hosted copy of the demo site can connect to a backend on the visitor's machine. Preflights also
   answer Chrome's Private Network Access check. The WebSocket gateway needs no change: browsers do
   not apply CORS to WebSockets, and every socket still needs a valid token.
+- The demo site is deployed at https://ticketsurge-web.vercel.app, and `.env.example` lists it in
+  `CORS_ORIGINS`, so a fresh clone can connect without editing anything.
 - `npm run demo:new-event`: opens a new 500-seat event on sale now. Used instead of resetting a
   sold-out event, so past bookings, payments and tickets are never rewritten.
