@@ -16,7 +16,7 @@ npm install
 cp .env.example .env
 npm run infra:up
 npm run build && npm run db:migrate && npm run db:seed && npm run kafka:topics
-npm run dev:api
+npm run dev:all        # all eight services in one terminal, logs prefixed by service
 ```
 
 More detail: [docs/architecture.md](docs/architecture.md) and [docs/progress.md](docs/progress.md).

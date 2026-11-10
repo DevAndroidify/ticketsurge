@@ -39,6 +39,7 @@ npm run build             # tsc -b across all workspaces
 npm run lint              # eslint + prettier check
 npm test                  # unit tests
 npm run test:integration  # tests against the running containers
+npm run dev:all           # run all eight services with watch mode in one terminal
 npm run dev:api           # run the API with watch mode
 npm run dev:admission     # run the admission worker with watch mode
 npm run db:migrate        # apply SQL migrations; npm run db:seed for the 500-seat demo event

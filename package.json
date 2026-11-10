@@ -23,6 +23,8 @@
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
+    "dev:all": "concurrently --names api,realtime,admission,booking,payment,tickets,notify,analytics --prefix-colors auto \"npm:dev:api\" \"npm:dev:realtime\" \"npm:dev:admission\" \"npm:dev:booking-worker\" \"npm:dev:payment\" \"npm:dev:tickets\" \"npm:dev:notifications\" \"npm:dev:analytics\"",
+    "start:all": "concurrently --names api,realtime,admission,booking,payment,tickets,notify,analytics --prefix-colors auto \"npm:start:api\" \"npm:start:realtime\" \"npm:start:admission\" \"npm:start:booking-worker\" \"npm:start:payment\" \"npm:start:tickets\" \"npm:start:notifications\" \"npm:start:analytics\"",
     "dev:api": "npm run dev -w @ticketsurge/api",
     "start:api": "npm run start -w @ticketsurge/api",
     "dev:admission": "npm run dev -w @ticketsurge/admission-worker",
@@ -56,6 +58,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.19.2",
+    "concurrently": "^9.2.5",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.14.0",
